@@ -40,8 +40,6 @@ import Data.String
 import Data.Text (Text, isPrefixOf)
 import qualified Data.Text as T
 
-import Debug.Trace
-
 type Position = Integer
 
 data ParseError

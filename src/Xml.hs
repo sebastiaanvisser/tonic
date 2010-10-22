@@ -21,24 +21,31 @@ data Xml n where
   Proc :: Text -> Text                      -> Xml Node 
   List :: [Xml x]                           -> Xml [x] 
 
+
+data X
+  = E QName [X] [X]
+  | A QName Text
+  | T Text
+  | C Text
+  | P Text Text
+  | L [X]
+  deriving Show
+
 instance Show QName where
   show (QName "" n) = "|" ++ unpack n ++ "|"
   show (QName ns n) = "|" ++ unpack ns ++ ":" ++ unpack n ++ "|"
 
 instance Show (Xml n) where
-  show (Elem n a c) = "<" ++ show n ++ showAttrList a ++ ">\n" ++ indent (showNodeList c) ++ "</" ++ show n ++ ">"
+  show (Elem n a c) = "<" ++ show n ++ showAttrList a ++ ">\n" ++ indent (show c) ++ "</" ++ show n ++ ">"
   show (Attr k v)   = show k ++ "=|" ++ unpack v ++ "|"
   show (Text t)     = "|" ++ unpack (strip t) ++ "|"
   show (Cmnt c)     = "<!-- |" ++ unpack c ++ "| -->"
   show (Proc p v)   = "<? |" ++ unpack p ++ "| |" ++ unpack v ++ "| ?>"
-  show (List xs)    = show xs
+  show (List ns)    = intercalate "\n" (map show ns)
 
 indent :: String -> String
 indent = unlines . map ("  "++) . lines
 
 showAttrList :: Xml [Attr] -> String
 showAttrList (List as) = concatMap (" "++) (map show as)
-
-showNodeList :: Xml [Node] -> String
-showNodeList (List ns) = intercalate "\n" (map show ns)
 
