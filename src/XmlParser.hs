@@ -2,80 +2,78 @@
 module XmlParser where
 
 import Control.Applicative
+import Control.Monad.Reader
 import Data.Char
 import Parser
 import Data.Text (Text)
 import qualified Data.Text.IO as T
+import Prelude hiding (until)
 
 import Xml
-
-
 
 
 qname :: Text -> QName
 qname = QName ""
 
-proc :: Parser (Xml Node)
-proc = Proc "todo" <$> (token "<?" *> delim "?>")
+proc :: P (Xml Node)
+proc = Proc "todo" <$> (token "<?" *> until "?>")
 
-comment :: Parser (Xml Node)
-comment = Cmnt <$> (token "<!--" *> delim "-->")
+comment :: P (Xml Node)
+comment = Cmnt <$> (token "<!--" *> until "-->")
 
-node :: Parser (Xml Node)
+node :: P (Xml Node)
 node = comment <|> proc <|> element <|> text
 
-nodes :: Parser (Xml [Node])
+nodes :: P (Xml [Node])
 nodes = List <$> many node
 
-element :: Parser (Xml Node)
+element :: P (Xml Node)
 element =
   do (tag, as) <- (,) <$> space open <*> space attributes
-     Elem (qname tag) as <$> space (self <|> rest tag)
+     local (tag:) (Elem (qname tag) as <$> space (self <|> rest tag))
 
   where
   open     = token "<" *> name
-  name     = satisfy (not . (`elem` " \r\n/>"))
+  name     = while (not . (`elem` " \r\n/>"))
   self     = List [] <$ token "/>"
   rest t   = token ">" *> nodes <* close t
-  close t  = token "</" *> token t <* token ">"
+  close t  = token "</" *> name <* token ">"
 
-text :: Parser (Xml Node)
-text = Text <$> satisfy (/= '<')
+text :: P (Xml Node)
+text = Text <$> while (/= '<')
 
 -- Attribute parsing.
 
-key :: Parser Text
-key = satisfy (not . (`elem` " \r\n=>/"))
+key :: P Text
+key = while (not . (`elem` " \r\n=>/"))
 
-value :: Parser Text
+value :: P Text
 value = squoted <|> dquoted <|> unquoted
-  where dquoted   = token "\"" *> delim "\""
-        squoted   = token "'" *> delim "'"
-        unquoted = satisfy (not . (`elem` " \r\n>/"))
+  where dquoted   = token "\"" *> until "\""
+        squoted   = token "'" *> until "'"
+        unquoted = while (not . (`elem` " \r\n>/"))
 
-attribute :: Parser (Xml Attr)
+attribute :: P (Xml Attr)
 attribute = Attr <$> (qname <$> key) <*> option "" (token "=" *> option "" value)
 
-attributes :: Parser (Xml [Attr])
+attributes :: P (Xml [Attr])
 attributes = List <$> many (space attribute)
 
 
 
-space :: Parser a -> Parser a
-space p = p <* optional (satisfy isSpace)
+space :: P a -> P a
+space p = p <* optional (while isSpace)
 
-nospace :: (Functor m, Monad m) => ParserT m Text
-nospace = satisfy (not . isSpace)
+nospace :: P Text
+nospace = while (not . isSpace)
 
-nospaceOrClose :: Parser Text
-nospaceOrClose = satisfy (\x -> x /= '>' && not (isSpace x))
+nospaceOrClose :: P Text
+nospaceOrClose = while (\x -> x /= '>' && not (isSpace x))
 
 main :: IO ()
 main =
   do html <- T.readFile "test.html"
-     case runParser nodes html of
-       Left  e -> print e
-       Right r -> print r
+     print (parse nodes html)
 
 -- Todo: test everything for opening and never closing!
 

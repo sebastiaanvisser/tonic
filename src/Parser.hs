@@ -6,107 +6,55 @@
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
   #-}
-module Parser
-(
--- * Parser monad and transformer.
-  ParserT (..)
-, runParserT
-
-, Parser
-, runParser
-
--- Parser status types.
-, Position
-, ParseError (..)
-
--- * Primitive parsers.
-, token
-, delim
-, satisfy
-
--- * Derived parsers.
-, option
-, sep1
-, sep
-)
-where
+module Parser where
 
 import Control.Applicative
-import Control.Monad.Error
-import Control.Monad.Errors
 import Control.Monad.Identity
 import Control.Monad.State
-import Data.String
+import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
+import Data.Maybe
 import Data.Text (Text, isPrefixOf)
 import qualified Data.Text as T
 
-type Position = Integer
+type P a = StateT Text (ReaderT [Text] (MaybeT Identity)) a
 
-data ParseError
-  = Token   Text Position
-  | Delim   Text Position
-  | Satisfy Position
-  | NonProductive
-  deriving (Eq, Ord, Show)
+noParse :: a
+noParse = error "This is a bug, please report."
 
-type ParseState = (Position, Text)
-
-newtype ParserT m a = Parser { runParser_ :: StateT ParseState (ErrorsT [ParseError] m) a }
-  deriving ( Functor
-           , Applicative
-           , Alternative
-           , Monad
-           , MonadState ParseState
-           , MonadError [ParseError]
-           )
-
-type Parser a = ParserT Identity a
-
-instance (Functor m, Monad m) => IsString (ParserT m Text) where
-  fromString = token . fromString
-
-runParserT :: (Functor m, Monad m) => ParserT m a -> Text -> m (Either [ParseError] a)
-runParserT parser input
-  = runErrorsT
-  . flip evalStateT (0, input)
-  . runParser_
+parse :: P a -> Text -> a
+parse parser input
+  = runIdentity
+  . fmap (fromMaybe noParse)
+  . runMaybeT
+  . flip runReaderT []
+  . flip evalStateT input
   $ parser
 
-runParser :: Parser a -> Text -> Either [ParseError] a
-runParser p = runIdentity . runParserT p
+progress :: Int -> P ()
+progress n = modify (T.drop n)
 
-token :: (Functor m, Monad m) => Text -> ParserT m Text
+token :: Text -> P Text
 token tok =
-  do (pos, st) <- get
+  do st <- get
      if isPrefixOf tok st
-       then tok <$ shift (T.length tok)
-       else throwError [Token tok pos]
+       then tok <$ progress (T.length tok)
+       else fail ""
 
-delim :: (Functor m, Monad m) => Text -> ParserT m Text
-delim tok =
-  do (pos, st) <- get
+until :: Text -> P Text
+until tok =
+  do st <- get
      case T.find tok st of
-       []       -> throwError [Delim tok pos]
-       (p, _):_ -> p <$ shift (T.length p + T.length tok)
+       []       -> fail ""
+       (p, _):_ -> p <$ progress (T.length p + T.length tok)
 
-satisfy :: (Functor m, Monad m) => (Char -> Bool) -> ParserT m Text
-satisfy f =
-  do (pos, st) <- get
+while :: (Char -> Bool) -> P Text
+while f =
+  do st <- get
      case T.takeWhile f st of
-       ""  -> throwError [Satisfy pos]
-       tok -> tok <$ shift (T.length tok)
-
-shift :: Monad m => Int -> ParserT m ()
-shift n = modify (\(pos, st) -> (pos + fromIntegral n, T.drop n st))
-
--------------------------------------
+       ""  -> fail ""
+       tok -> tok <$ progress (T.length tok)
 
 option :: Alternative f => a -> f a -> f a
 option d p = p <|> pure d
-
-sep1 :: Alternative f => f sep -> f a -> f [a]
-sep1 s p = (:) <$> p <*> many (s *> p)
-
-sep :: Alternative f => f sep -> f a -> f [a]
-sep s p = option [] (sep1 s p)
 
