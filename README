@@ -1,0 +1,27 @@
+Tonic is an XML and HTML toolkit for Haskell. There are currently many XML
+toolkit available for Haskell, unfortunately
+
+Tonic provides:
+
+  - Well thought-out interface:
+
+  - Failsafe: Tonic's parser never fails. When you feed the parser a proper XML
+    text the parser will provide you with a proper XML tree. When you feed the
+    parser some fuzzy HTML, or some other XML-like dialect that isn't 100%
+    valid XML, Tonic will do everything in its power to give you back an XML
+    tree that conforms your expectations.
+
+  - Performance: By using a specialized parser monad and only using Data.Text
+    as input, Tonic has very fast XML parser. For pretty-printing Tonic uses
+    the highly optimized Blaze-Builder package. This builder allows for pretty
+    printing large quantities of XML blazingly fast.
+
+  - Filter combinators:
+
+  - Laziness: Both the parser and the filter combinators are lazy. Because the
+    parser will never block searching for a closing tag when you are only
+    interested in the contents of an element. This way processing small parts
+    of a very large XML document becomes very efficient.
+
+  - Generic conversion:
+

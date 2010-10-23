@@ -1,8 +1,8 @@
-Name:             laxml
+Name:             tonic
 Version:          0.0.1
-Description:      Haskel XML library.
-Synopsis:         Haskel XML library.
-Category:         Data, Xml
+Synopsis:         Fast, lazy and simple XML.
+Description:      This package is called tonic because it is not.
+Category:         Data, Xml, Html
 License:          BSD3
 License-file:     LICENSE
 Author:           Sebastiaan Visser
@@ -19,6 +19,6 @@ Library
                   , monads-fd    >= 0.1 && < 0.2
                   , transformers >= 0.2 && < 0.3
 
-  Exposed-modules:  Xml.Lax.Types
-                    Xml.Lax.Parser
+  Exposed-modules:  Xml.Tonic.Types
+                    Xml.Tonic.Parser
 

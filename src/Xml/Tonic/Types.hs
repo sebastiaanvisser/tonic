@@ -3,39 +3,48 @@
   , GADTs
   , EmptyDataDecls
   #-}
-module Xml.Tonic.Types where
+module Xml.Tonic.Types
+(
+
+-- * Xml datatype as a family of types encoded in a single GADT.
+ Xml (..)
+
+-- * Phantom types as index for the 'Xml' family.
+, Name
+, Node
+, Attr
+)
+where
 
 import Data.List
 import Data.Text (Text, unpack, strip)
 
+data Name
 data Node
 data Attr
 
-data QName = QName Text Text
-
 data Xml n where
-  Elem :: QName -> Xml [Attr] -> Xml [Node] -> Xml Node
-  Attr :: QName -> Text                     -> Xml Attr
-  Text :: Text                              -> Xml Node
-  Cmnt :: Text                              -> Xml Node
-  Proc :: Text -> Text                      -> Xml Node 
-  List :: [Xml x]                           -> Xml [x] 
-
-instance Show QName where
-  show (QName "" n) = "|" ++ unpack n ++ "|"
-  show (QName ns n) = "|" ++ unpack ns ++ ":" ++ unpack n ++ "|"
+  Element               :: Xml Name -> Xml [Attr] -> Xml [Node] -> Xml Node
+  Attribute             :: Xml Name -> Text                     -> Xml Attr
+  Text                  :: Text                                 -> Xml Node
+  CData                 :: Text                                 -> Xml Node
+  Comment               :: Text                                 -> Xml Node
+  ProcessingInstruction :: Text -> Text                         -> Xml Node 
+  NodeSet               :: [Xml Node]                           -> Xml [Node] 
+  AttributeList         :: [Xml Attr]                           -> Xml [Attr] 
+  QualifiedName         :: Text -> Text                         -> Xml Name
 
 instance Show (Xml n) where
-  show (Elem n a c) = "<" ++ show n ++ showAttrList a ++ ">\n" ++ indent (show c) ++ "</" ++ show n ++ ">"
-  show (Attr k v)   = show k ++ "=|" ++ unpack v ++ "|"
-  show (Text t)     = "|" ++ unpack (strip t) ++ "|"
-  show (Cmnt c)     = "<!-- |" ++ unpack c ++ "| -->"
-  show (Proc p v)   = "<? |" ++ unpack p ++ "| |" ++ unpack v ++ "| ?>"
-  show (List ns)    = intercalate "\n" (map show ns)
+  show (Element               n a c) = "<" ++ show n ++ show a ++ ">\n" ++ indent (show c) ++ "</" ++ show n ++ ">"
+  show (Attribute             k v  ) = show k ++ "=|" ++ unpack v ++ "|"
+  show (Text                  t    ) = "c|" ++ unpack (strip t) ++ "|"
+  show (CData                 t    ) = "t|" ++ unpack (strip t) ++ "|"
+  show (Comment               c    ) = "<!-- |" ++ unpack c ++ "| -->"
+  show (ProcessingInstruction p v  ) = "<? |" ++ unpack p ++ "| |" ++ unpack v ++ "| ?>"
+  show (NodeSet               ns   ) = intercalate "\n" (map show ns)
+  show (AttributeList         as   ) = concatMap (" "++) (map show as)
+  show (QualifiedName         ns n ) = "|" ++ unpack ns ++ ":" ++ unpack n ++ "|"
 
 indent :: String -> String
 indent = unlines . map ("  "++) . lines
-
-showAttrList :: Xml [Attr] -> String
-showAttrList (List as) = concatMap (" "++) (map show as)
 
