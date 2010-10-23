@@ -5,20 +5,18 @@ module Xml.Tonic.Print
 
   pretty
 , compact
+, asIs
 
--- * Text builders.
+-- * Configurable text builder.
 
-, compactBuilder
-, prettyBuilder
+, Indent
+, Compact
+, Closing
+, Trim
+, Filter
 
--- * Primitive builders.
+, builder
 
-, element
-, attribute
-, comment
-, processingIntruction
-, attributeList
-, qualifiedName
 )
 where
 
@@ -28,44 +26,57 @@ import Data.Text.Lazy (Text, strip)
 import Data.Text.Lazy.Builder
 import Xml.Tonic.Types
 
-compact :: Xml a -> Text
-compact = toLazyText . compactBuilder
+{- |
+  - Indent with two spaces per level.
+
+  - Every item on its own line.
+
+  - Self close allowed for all tags.
+
+  - Strip leading whitespace from text nodes.
+
+  - Filter all whitespace only text nodes.
+-}
 
 pretty :: Xml a -> Text
-pretty = toLazyText . prettyBuilder
+pretty = toLazyText
+       . builder
+         (map (mappend "  "))
+         (mconcat . intersperse "\n")
+         (const True)
+         strip
+         noSpace
 
-compactBuilder :: Xml a -> Builder
-compactBuilder = b
-  where b :: Xml a -> Builder
-        b (Element               n a c) = mconcat [element n a, b c, "</", b n, ">"]
-        b (Attribute             k v  ) = attribute k v
-        b (Text                  t    ) = fromLazyText (strip t)
-        b (CData                 d    ) = fromLazyText d
-        b (Comment               c    ) = comment c
-        b (ProcessingInstruction p v  ) = processingIntruction p v
-        b (NodeSet               ns   ) = mconcat (map b ns)
-        b (AttributeList         as   ) = attributeList as
-        b (QualifiedName         n    ) = qualifiedName n
+asIs :: Xml a -> Text
+asIs = toLazyText . builder id mconcat (const False) id id
 
+compact :: Xml a -> Text
+compact = toLazyText . builder id mconcat (const True) strip noSpace
 
-indent :: [Builder] -> [Builder]
-indent = map (mappend "  ")
+type Indent  = [Builder] -> [Builder]
+type Compact = [Builder] -> Builder
+type Closing = Xml Name -> Bool
+type Trim    = Text -> Text
+type Filter  = [Xml Node] -> [Xml Node]
 
-prettyBuilder :: Xml a -> Builder
-prettyBuilder = mconcat . intersperse "\n" . b
+builder :: Indent -> Compact -> Closing -> Trim -> Filter -> Xml a -> Builder
+builder indent join closing trim ft = join . b
   where b :: Xml a -> [Builder]
         b (Element               n a c) = let subs = b c
-                                          in if length subs <= 1
-                                             then [mconcat [element n a, mconcat subs, "</", mconcat (b n), ">"]]
-                                             else [element n a] ++ indent subs ++ [mconcat ["</", mconcat (b n), ">"]]
-        b (Attribute             k v  ) = [attribute k v]
-        b (Text                  t    ) = [fromLazyText (strip t)]
+                                              tagOpen s = mconcat ["<", mconcat (b n), mconcat (b a), if s then "/>" else ">"]
+                                          in case (length subs, closing n) of
+                                               (0, True) -> [tagOpen True]
+                                               (1, _)    -> [mconcat [tagOpen False, mconcat subs, "</", mconcat (b n), ">"]]
+                                               _         -> tagOpen False : indent subs ++ [mconcat ["</", mconcat (b n), ">"]]
+        b (Attribute             k v  ) = [mconcat [mconcat (b k), "=\"", fromLazyText v, "\""]]
+        b (Text                  t    ) = [fromLazyText (trim t)]
         b (CData                 d    ) = [fromLazyText d]
-        b (Comment               c    ) = [comment c]
-        b (ProcessingInstruction p v  ) = [processingIntruction p v]
-        b (NodeSet               ns   ) = concatMap b (noSpace ns)
-        b (AttributeList         as   ) = [attributeList as]
-        b (QualifiedName         n    ) = [qualifiedName n]
+        b (Comment               c    ) = [mconcat ["<!-- ", fromLazyText c, " -->"]]
+        b (ProcessingInstruction p    ) = [mconcat ["<?", fromLazyText p, " ?>"]]
+        b (Doctype               d    ) = [mconcat ["<!", fromLazyText d, " >"]]
+        b (NodeSet               ns   ) = concatMap b (ft ns)
+        b (AttributeList         as   ) = [mconcat (map (mappend " " . mconcat . b) as)]
+        b (QualifiedName         n    ) = [fromLazyText n]
 
 noSpace :: [Xml Node] -> [Xml Node]
 noSpace s = filter trim s
@@ -73,29 +84,4 @@ noSpace s = filter trim s
         trim (Text xs) = strip xs /= ""
         trim _         = True
 
-isFlat :: Xml [Node] -> Bool
-isFlat (NodeSet s) = length (filter noText s) < 2
-  where noText :: Xml Node -> Bool
-        noText (Text {}) = False
-        noText _         = True
-
-
-
-element :: Xml Name -> Xml [Attr] -> Builder
-element n a = mconcat ["<", compactBuilder n, compactBuilder a, ">"]
-
-attribute :: Xml Name -> Text -> Builder
-attribute k v = mconcat [compactBuilder k, "=\"", fromLazyText v, "\""]
-
-comment :: Text -> Builder
-comment c = mconcat ["<!-- ", fromLazyText c, " -->"]
-
-processingIntruction :: Text -> Text -> Builder
-processingIntruction p v = mconcat ["<?", fromLazyText p, " ", fromLazyText v, " ?>"]
-
-attributeList :: [Xml Attr] -> Builder
-attributeList as = mconcat (map (mappend " " . compactBuilder) as)
-
-qualifiedName :: Text -> Builder
-qualifiedName n = fromLazyText n
 

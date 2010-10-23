@@ -7,7 +7,7 @@
   , MultiParamTypeClasses
   , GADTs
   #-}
-module Xml.Tonic.Parser
+module Xml.Tonic.Parse
 (
 -- * Top level functions for parsing XML or HTML.
   xml
@@ -44,10 +44,10 @@ import Control.Monad.State
 import Control.Monad.Trans.Maybe
 import Data.Char
 import Data.Maybe
-import Data.Text (Text, isPrefixOf)
+import Data.Text.Lazy (Text, isPrefixOf)
 import Prelude hiding (until)
 import Xml.Tonic.Types
-import qualified Data.Text as T
+import qualified Data.Text.Lazy as T
 
 xml :: Text -> Xml [Node]
 xml = runParser nodeset
@@ -56,13 +56,13 @@ html :: Text -> Xml [Node]
 html = runParser nodeset
 
 processingInstruction :: Parser (Xml Node)
-processingInstruction = ProcessingInstruction "todo" <$> (token "<?" *> until "?>")
+processingInstruction = ProcessingInstruction <$> (token "<?" *> until "?>")
 
 comment :: Parser (Xml Node)
 comment = Comment <$> (token "<!--" *> until "-->")
 
 node :: Parser (Xml Node)
-node = comment <|> processingInstruction <|> element <|> text
+node = comment <|> doctype <|> processingInstruction <|> element <|> text
 
 nodeset :: Parser (Xml [Node])
 nodeset = NodeSet <$> many node
@@ -70,7 +70,7 @@ nodeset = NodeSet <$> many node
 element :: Parser (Xml Node)
 element =
   do (t, as) <- (,) <$> free open <*> free attributeList
-     local (t:) (Element (QualifiedName "" t) as <$> free (self <|> rest t))
+     local (t:) (Element (QualifiedName t) as <$> free (self <|> rest t))
 
   where
   open     = token "<" *> tag
@@ -95,9 +95,11 @@ value = squoted <|> dquoted <|> unquoted
   where dquoted  = token "\"" *> until "\""
         squoted  = token "'" *> until "'"
         unquoted = while (not . (`elem` " \r\n>/"))
+doctype :: Parser (Xml Node)
+doctype = Doctype <$> (token "<!" *> until ">")
 
 attribute :: Parser (Xml Attr)
-attribute = Attribute <$> (QualifiedName "" <$> key) <*> option "" (token "=" *> option "" value)
+attribute = Attribute <$> (QualifiedName <$> key) <*> option "" (token "=" *> option "" value)
 
 attributeList :: Parser (Xml [Attr])
 attributeList = AttributeList <$> many (free attribute)

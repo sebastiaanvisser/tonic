@@ -28,7 +28,8 @@ data Xml n where
   Text                  :: Text                                 -> Xml Node
   CData                 :: Text                                 -> Xml Node
   Comment               :: Text                                 -> Xml Node
-  ProcessingInstruction :: Text -> Text                         -> Xml Node 
+  Doctype               :: Text                                 -> Xml Node
+  ProcessingInstruction :: Text                                 -> Xml Node 
   NodeSet               :: [Xml Node]                           -> Xml [Node] 
   AttributeList         :: [Xml Attr]                           -> Xml [Attr] 
   QualifiedName         :: Text                                 -> Xml Name
