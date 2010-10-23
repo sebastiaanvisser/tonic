@@ -7,7 +7,7 @@
   , MultiParamTypeClasses
   , GADTs
   #-}
-module Text.XML.Lax.Parser where
+module Xml.Lax.Parser where
 
 import Control.Applicative
 import Control.Monad.Identity
@@ -18,7 +18,7 @@ import Data.Char
 import Data.Maybe
 import Data.Text (Text, isPrefixOf)
 import Prelude hiding (until)
-import Text.XML.Lax.Types
+import Xml.Lax.Types
 import qualified Data.Text as T
 
 

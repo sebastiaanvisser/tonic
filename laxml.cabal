@@ -1,0 +1,24 @@
+Name:             laxml
+Version:          0.0.1
+Description:      Haskel XML library.
+Synopsis:         Haskel XML library.
+Category:         Data, Xml
+License:          BSD3
+License-file:     LICENSE
+Author:           Sebastiaan Visser
+Maintainer:       haskell@fvisser.nl
+Build-Type:       Simple
+Cabal-Version:    >= 1.2
+
+Library
+  GHC-Options:      -threaded -Wall -O
+  HS-Source-Dirs:   src
+
+  Build-Depends:    base         >= 4   && < 5
+                  , text         >= 0.9 && < 0.10
+                  , monads-fd    >= 0.1 && < 0.2
+                  , transformers >= 0.2 && < 0.3
+
+  Exposed-modules:  Xml.Lax.Types
+                    Xml.Lax.Parser
+

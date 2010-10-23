@@ -3,7 +3,7 @@
   , GADTs
   , EmptyDataDecls
   #-}
-module Text.XML.Lax.Types where
+module Xml.Lax.Types where
 
 import Data.List
 import Data.Text (Text, unpack, strip)
