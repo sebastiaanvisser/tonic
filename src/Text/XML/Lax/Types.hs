@@ -3,7 +3,7 @@
   , GADTs
   , EmptyDataDecls
   #-}
-module Xml where
+module Text.XML.Lax.Types where
 
 import Data.List
 import Data.Text (Text, unpack, strip)
@@ -20,16 +20,6 @@ data Xml n where
   Cmnt :: Text                              -> Xml Node
   Proc :: Text -> Text                      -> Xml Node 
   List :: [Xml x]                           -> Xml [x] 
-
-
-data X
-  = E QName [X] [X]
-  | A QName Text
-  | T Text
-  | C Text
-  | P Text Text
-  | L [X]
-  deriving Show
 
 instance Show QName where
   show (QName "" n) = "|" ++ unpack n ++ "|"
