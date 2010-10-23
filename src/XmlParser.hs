@@ -4,13 +4,10 @@ module XmlParser where
 import Control.Applicative
 import Control.Monad.Reader
 import Data.Char
-import Parser
 import Data.Text (Text)
-import qualified Data.Text.IO as T
+import Parser
 import Prelude hiding (until)
-
 import Xml
-
 
 qname :: Text -> QName
 qname = QName ""
@@ -37,7 +34,7 @@ element =
   name     = while (not . (`elem` " \r\n/>"))
   self     = List [] <$ token "/>"
   rest t   = token ">" *> nodes <* close t
-  close t  = token "</" *> name <* token ">"
+  close t  = optional (token "</" *> token t <* token ">")
 
 text :: P (Xml Node)
 text = Text <$> while (/= '<')
@@ -59,8 +56,6 @@ attribute = Attr <$> (qname <$> key) <*> option "" (token "=" *> option "" value
 attributes :: P (Xml [Attr])
 attributes = List <$> many (space attribute)
 
-
-
 space :: P a -> P a
 space p = p <* optional (while isSpace)
 
@@ -69,11 +64,4 @@ nospace = while (not . isSpace)
 
 nospaceOrClose :: P Text
 nospaceOrClose = while (\x -> x /= '>' && not (isSpace x))
-
-main :: IO ()
-main =
-  do html <- T.readFile "test.html"
-     print (parse nodes html)
-
--- Todo: test everything for opening and never closing!
 
