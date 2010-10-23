@@ -7,7 +7,7 @@
   , MultiParamTypeClasses
   , GADTs
   #-}
-module Xml.Lax.Parser where
+module Xml.Tonic.Parser where
 
 import Control.Applicative
 import Control.Monad.Identity
@@ -18,9 +18,8 @@ import Data.Char
 import Data.Maybe
 import Data.Text (Text, isPrefixOf)
 import Prelude hiding (until)
-import Xml.Lax.Types
+import Xml.Tonic.Types
 import qualified Data.Text as T
-
 
 parse :: Text -> Xml [Node]
 parse = runParser nodes
