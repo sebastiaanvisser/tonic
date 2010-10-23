@@ -2,10 +2,10 @@
     OverloadedStrings
   , GADTs
   , EmptyDataDecls
+  , StandaloneDeriving
   #-}
 module Xml.Tonic.Types
 (
-
 -- * Xml datatype as a family of types encoded in a single GADT.
  Xml (..)
 
@@ -16,8 +16,7 @@ module Xml.Tonic.Types
 )
 where
 
-import Data.List
-import Data.Text (Text, unpack, strip)
+import Data.Text.Lazy
 
 data Name
 data Node
@@ -32,19 +31,8 @@ data Xml n where
   ProcessingInstruction :: Text -> Text                         -> Xml Node 
   NodeSet               :: [Xml Node]                           -> Xml [Node] 
   AttributeList         :: [Xml Attr]                           -> Xml [Attr] 
-  QualifiedName         :: Text -> Text                         -> Xml Name
+  QualifiedName         :: Text                                 -> Xml Name
 
-instance Show (Xml n) where
-  show (Element               n a c) = "<" ++ show n ++ show a ++ ">\n" ++ indent (show c) ++ "</" ++ show n ++ ">"
-  show (Attribute             k v  ) = show k ++ "=|" ++ unpack v ++ "|"
-  show (Text                  t    ) = "c|" ++ unpack (strip t) ++ "|"
-  show (CData                 t    ) = "t|" ++ unpack (strip t) ++ "|"
-  show (Comment               c    ) = "<!-- |" ++ unpack c ++ "| -->"
-  show (ProcessingInstruction p v  ) = "<? |" ++ unpack p ++ "| |" ++ unpack v ++ "| ?>"
-  show (NodeSet               ns   ) = intercalate "\n" (map show ns)
-  show (AttributeList         as   ) = concatMap (" "++) (map show as)
-  show (QualifiedName         ns n ) = "|" ++ unpack ns ++ ":" ++ unpack n ++ "|"
-
-indent :: String -> String
-indent = unlines . map ("  "++) . lines
+deriving instance Eq   (Xml n)
+deriving instance Show (Xml n)
 

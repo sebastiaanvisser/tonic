@@ -20,5 +20,6 @@ Library
                   , transformers >= 0.2 && < 0.3
 
   Exposed-modules:  Xml.Tonic.Types
-                    Xml.Tonic.Parser
+                    Xml.Tonic.Parse
+                    Xml.Tonic.Print
 
