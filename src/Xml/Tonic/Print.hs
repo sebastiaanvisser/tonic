@@ -70,7 +70,7 @@ builder indent join closing trim ft = join . b
                                                _         -> tagOpen False : indent subs ++ [mconcat ["</", mconcat (b n), ">"]]
         b (Attribute             k v  ) = [mconcat [mconcat (b k), "=\"", fromLazyText v, "\""]]
         b (Text                  t    ) = [fromLazyText (trim t)]
-        b (CData                 d    ) = [fromLazyText d]
+        b (CData                 d    ) = [mconcat ["<[!CDATA[", fromLazyText d, "]]>"]]
         b (Comment               c    ) = [mconcat ["<!-- ", fromLazyText c, " -->"]]
         b (ProcessingInstruction p    ) = [mconcat ["<?", fromLazyText p, " ?>"]]
         b (Doctype               d    ) = [mconcat ["<!", fromLazyText d, " >"]]

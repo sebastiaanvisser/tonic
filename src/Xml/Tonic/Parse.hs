@@ -6,150 +6,116 @@
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
   , GADTs
+  , ViewPatterns
   #-}
-module Xml.Tonic.Parse
-(
--- * Top level functions for parsing XML or HTML.
-  xml
-, html
-
--- * Individual parser functions.
-
-, nodeset
-, node
-, element
-, attribute
-, attributeList
-, text
-, processingInstruction
-, comment
-, cdata
-
--- * The parser monad.
-, Parser
-, runParser
-
--- * Primitive parsers.
-, token
-, until
-, while
-
-)
-where
+module Xml.Tonic.Parse where
 
 import Control.Applicative
-import Control.Monad.Identity
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Trans.Maybe
+import Control.Monad
 import Data.Char
 import Data.Maybe
-import Data.Text.Lazy (Text, isPrefixOf)
+import Data.Text.Lazy (Text)
 import Prelude hiding (until)
 import Xml.Tonic.Types
 import qualified Data.Text.Lazy as T
 
 xml :: Text -> Xml [Node]
-xml = runParser nodeset
+xml = NodeSet . snd . runQ nodeSet
 
-html :: Text -> Xml [Node]
-html = runParser nodeset
+newtype Q a = Q { runQ :: Text -> (Text, a) }
+  deriving Functor
 
-processingInstruction :: Parser (Xml Node)
-processingInstruction = ProcessingInstruction <$> (token "<?" *> until "?>")
+instance Applicative Q where
+  pure a  = Q (\t -> (t, a))
+  a <*> b = Q (\t -> let (u, x) = runQ a t; (v, y) = runQ b u in (v, x y))
 
-comment :: Parser (Xml Node)
-comment = Comment <$> (token "<!--" *> until "-->")
+instance Monad Q where
+  return a = Q (\t -> (t, a))
+  a >>= b  = Q (\t -> let (u, x) = runQ a t in runQ (b x) u)
 
-node :: Parser (Xml Node)
-node = comment <|> doctype <|> processingInstruction <|> element <|> text
+while :: (Char -> Bool) -> Q Text
+while f = Q $ \i ->
+  let v = T.takeWhile f i
+  in (T.drop (T.length v) i, v)
 
-nodeset :: Parser (Xml [Node])
-nodeset = NodeSet <$> many node
+until :: Text -> Q Text
+until t = Q $ \i ->
+  case T.find t i of
+    []       -> ("", i)
+    (v, r):_ -> (T.drop (T.length t) r, v)
 
-element :: Parser (Xml Node)
+node :: Q (Maybe (Xml Node))
+node = Q $ \i ->
+  case i of
+    (T.stripPrefix "<!--"      -> Just j) -> Just . Comment               <$> runQ (until "-->") j
+    (T.stripPrefix "<![CDATA[" -> Just j) -> Just . CData                 <$> runQ (until "]]>") j
+    (T.stripPrefix "<!"        -> Just j) -> Just . Doctype               <$> runQ (until ">"  ) j
+    (T.stripPrefix "<?"        -> Just j) -> Just . ProcessingInstruction <$> runQ (until "?>" ) j
+    (T.stripPrefix "<"         -> Just j) -> runQ element j
+    j                                     -> case runQ (while (/= '<')) j of
+                                               (_, "") -> (i, Nothing)
+                                               (k, t)  -> (k, Just (Text t))
+
+element :: Q (Maybe (Xml Node))
 element =
-  do (t, as) <- (,) <$> free open <*> free attributeList
-     local (t:) (Element (QualifiedName t) as <$> free (self <|> rest t))
+  do tag <- while (not . (`elem` " \r\n/>"))
+     if T.null tag
+       then return Nothing
+       else
+         do space
+            a <- attributeList
+            s <- self
+            c <- if s
+                   then nodeSet <* closeTag tag
+                   else pure []
+            return (Just (Element (QualifiedName tag) (AttributeList a) (NodeSet c)))
 
-  where
-  open     = token "<" *> tag
-  tag      = while (not . (`elem` " \r\n/>"))
-  self     = NodeSet [] <$ token "/>"
-  rest t   = token ">" *> nodeset <* close t
-  close t  = optional (token "</" *> token t <* token ">")
+closeTag :: Text -> Q Text
+closeTag w = Q $ \i ->
+  case i of
+    (T.stripPrefix ("</" `T.append` w `T.append` ">") -> Just j) -> (j, w)
+    j                                                            -> (j, w)
 
-text :: Parser (Xml Node)
-text = Text <$> while (/= '<')
+self :: Q Bool
+self = Q $ \i ->
+  case i of
+    (T.stripPrefix ">"  -> Just j) -> (j, True)
+    (T.stripPrefix "/>" -> Just j) -> (j, False)
+    j                              -> (j, False)
 
-cdata :: Parser (Xml Node)
-cdata = Text <$> while (/= '<')
+nodeSet :: Q [Xml Node]
+nodeSet = asMany node
 
--- Attribute parsing.
+attributeList :: Q [Xml Attr]
+attributeList = asMany (space *> attribute)
 
-key :: Parser Text
-key = while (not . (`elem` " \r\n=>/"))
+attribute :: Q (Maybe (Xml Attr))
+attribute =
+  do k <- while (not . (`elem` " \r\n=>/"))
+     if T.null k
+       then return Nothing
+       else Just . Attribute (QualifiedName k) <$> optValue
 
-value :: Parser Text
-value = squoted <|> dquoted <|> unquoted
-  where dquoted  = token "\"" *> until "\""
-        squoted  = token "'" *> until "'"
-        unquoted = while (not . (`elem` " \r\n>/"))
-doctype :: Parser (Xml Node)
-doctype = Doctype <$> (token "<!" *> until ">")
+optValue :: Q Text
+optValue = Q $ \i ->
+  case i of
+    (T.stripPrefix "=" -> Just j) -> runQ value j
+    j                             -> (j, "")
 
-attribute :: Parser (Xml Attr)
-attribute = Attribute <$> (QualifiedName <$> key) <*> option "" (token "=" *> option "" value)
+value :: Q Text
+value = Q $ \i ->
+  case i of
+    (T.stripPrefix "\"" -> Just j) -> runQ (until "\"") j
+    (T.stripPrefix "\'" -> Just j) -> runQ (until "\'") j
+    j                              -> runQ (while (not . (`elem` " \r\n>/"))) j
 
-attributeList :: Parser (Xml [Attr])
-attributeList = AttributeList <$> many (free attribute)
+space :: Q ()
+space = () <$ while isSpace
 
-option :: Alternative f => a -> f a -> f a
-option d p = p <|> pure d
-
-free :: Parser a -> Parser a
-free p = p <* optional (while isSpace)
-
-newtype Parser a = P { runP :: StateT Text (ReaderT [Text] (MaybeT Identity)) a }
-  deriving ( Functor
-           , Applicative
-           , Alternative
-           , Monad
-           , MonadPlus
-           , MonadState  Text
-           , MonadReader [Text]
-           )
-
-noParse :: a
-noParse = error "This is a bug, please report."
-
-runParser :: Parser a -> Text -> a
-runParser parser input
-  = runIdentity
-  . fmap (fromMaybe noParse)
-  . runMaybeT
-  . flip runReaderT []
-  . flip evalStateT input
-  . runP
-  $ parser
-
-token :: Text -> Parser Text
-token tok =
-  do v <- gets (isPrefixOf tok)
-     if v then tok <$ modify (T.drop (T.length tok))
-          else fail []
-
-until :: Text -> Parser Text
-until tok =
-  do v <- gets (T.find tok)
-     case v of
-       []       -> fail []
-       (p, _):_ -> p <$ modify (T.drop (T.length p + T.length tok))
-
-while :: (Char -> Bool) -> Parser Text
-while f =
-  do v <- gets (T.takeWhile f)
-     case v of
-       ""  -> fail []
-       tok -> tok <$ modify (T.drop (T.length tok))
+asMany :: Q (Maybe a) -> Q [a]
+asMany p = Q $ \i ->
+  case runQ p i of
+    (_, Nothing) -> (i, [])
+    (j, Just a)  -> let (k, as) = runQ (asMany p) j
+                    in (k, a:as)
 

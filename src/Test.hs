@@ -7,6 +7,13 @@ import qualified Data.Text.Lazy.IO as T
 
 main :: IO ()
 main =
-  do f <- T.readFile "../tests/xml.html"
+  do f <- T.readFile "../tests/test.html"
      let parsed = Parse.xml f
-     T.writeFile "../tests/out.html" (Print.pretty parsed)
+     T.putStrLn (Print.pretty parsed)
+     _ <- getLine
+
+     g <- T.readFile "../tests/xml.html"
+     let parsed1 = Parse.xml g
+     print parsed1
+--      putStrLn "----------------------------------------------"
+--      T.writeFile "../tests/out.html" (Print.pretty parsed)
