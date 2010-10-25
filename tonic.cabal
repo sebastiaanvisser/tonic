@@ -23,3 +23,8 @@ Library
                     Xml.Tonic.Parse
                     Xml.Tonic.Print
 
+Executable          xml-text
+  Executable:       xml-text
+  Main-is:          Test.hs
+  GHC-Options:      -threaded -Wall
+  HS-Source-Dirs:   src

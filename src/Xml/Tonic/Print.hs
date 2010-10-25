@@ -2,19 +2,12 @@
 module Xml.Tonic.Print
 (
 -- * Top level pretty printers.
-
   pretty
 , compact
-, asIs
+, asis
 
--- * Configurable text builder.
-
-, Indent
-, Compact
-, Closing
-, Trim
-, Filter
-
+-- * Builder.
+, Config (..)
 , builder
 
 )
@@ -26,62 +19,51 @@ import Data.Text.Lazy (Text, strip)
 import Data.Text.Lazy.Builder
 import Xml.Tonic.Types
 
-{- |
-  - Indent with two spaces per level.
-
-  - Every item on its own line.
-
-  - Self close allowed for all tags.
-
-  - Strip leading whitespace from text nodes.
-
-  - Filter all whitespace only text nodes.
--}
-
 pretty :: Xml a -> Text
-pretty = toLazyText
-       . builder
-         (map (mappend "  "))
-         (mconcat . intersperse "\n")
-         (const True)
-         strip
-         noSpace
-
-asIs :: Xml a -> Text
-asIs = toLazyText . builder id mconcat (const False) id id
+pretty = toLazyText . builder (Config (map (mappend "  ")) (mconcat . intersperse "\n") (const True) strip noSpace True)
 
 compact :: Xml a -> Text
-compact = toLazyText . builder id mconcat (const True) strip noSpace
+compact = toLazyText . builder (Config id mconcat (const True) strip noSpace False)
 
-type Indent  = [Builder] -> [Builder]
-type Compact = [Builder] -> Builder
-type Closing = Xml Name -> Bool
-type Trim    = Text -> Text
-type Filter  = [Xml Node] -> [Xml Node]
+asis :: Xml a -> Text
+asis = toLazyText . builder (Config id mconcat (const True) id id False)
 
-builder :: Indent -> Compact -> Closing -> Trim -> Filter -> Xml a -> Builder
-builder indent join closing trim ft = join . b
+data Config = Config
+  { cIndent  :: [Builder] -> [Builder]
+  , cCompact :: [Builder] -> Builder
+  , cClosing :: Xml Name -> Bool
+  , cTrim    :: Text -> Text
+  , cFilter  :: [Xml Node] -> [Xml Node]
+  , cFlatten :: Bool
+  }
+
+builder :: Config -> Xml a -> Builder
+builder (Config indent join closing trim skip flatten) = join . b
   where b :: Xml a -> [Builder]
-        b (Element               n a c) = let subs = b c
-                                              tagOpen s = mconcat ["<", mconcat (b n), mconcat (b a), if s then "/>" else ">"]
-                                          in case (length subs, closing n) of
-                                               (0, True) -> [tagOpen True]
-                                               (1, _)    -> [mconcat [tagOpen False, mconcat subs, "</", mconcat (b n), ">"]]
-                                               _         -> tagOpen False : indent subs ++ [mconcat ["</", mconcat (b n), ">"]]
-        b (Attribute             k v  ) = [mconcat [mconcat (b k), "=\"", fromLazyText v, "\""]]
+        b (Element               n a c) = let subs   = b c
+                                              open s = "<" <> mconcat (b n) <> mconcat (b a) <> if s then "/>" else ">"
+                                              close  = "</" <> mconcat (b n) <> ">"
+                                          in case (flatten, subs, closing n) of
+                                            (False, [],  _) ->           open True  : indent  subs
+                                            (False, _,   _) ->           open False : indent  subs ++ [close]
+                                            (True,  [],  _) -> [mconcat [open True,   mconcat subs]]
+                                            (True,  [_], _) -> [mconcat [open False,  mconcat subs,    close]]
+                                            (True,  _,   _) ->           open False : indent  subs ++ [close]
+        b (Attribute             k v  ) = [mconcat (b k) <> "=\"" <> fromLazyText v <> "\""]
         b (Text                  t    ) = [fromLazyText (trim t)]
-        b (CData                 d    ) = [mconcat ["<[!CDATA[", fromLazyText d, "]]>"]]
-        b (Comment               c    ) = [mconcat ["<!-- ", fromLazyText c, " -->"]]
-        b (ProcessingInstruction p    ) = [mconcat ["<?", fromLazyText p, " ?>"]]
-        b (Doctype               d    ) = [mconcat ["<!", fromLazyText d, " >"]]
-        b (NodeSet               ns   ) = concatMap b (ft ns)
-        b (AttributeList         as   ) = [mconcat (map (mappend " " . mconcat . b) as)]
+        b (CData                 d    ) = ["<![CDATA[" <> fromLazyText d <> "]]>"]
+        b (Comment               c    ) = ["<!-- " <> fromLazyText c <> "-->"]
+        b (ProcessingInstruction p    ) = ["<?" <> fromLazyText p <> " ?>"]
+        b (Doctype               d    ) = ["<!" <> fromLazyText d <> " >"]
+        b (NodeSet               ns   ) = foldr (++) [] (map b (skip ns))
+        b (AttributeList         as   ) = concatMap (\a -> " " : b a) as
         b (QualifiedName         n    ) = [fromLazyText n]
+
+        (<>) = mappend
 
 noSpace :: [Xml Node] -> [Xml Node]
 noSpace s = filter trim s
   where trim :: Xml Node -> Bool
         trim (Text xs) = strip xs /= ""
         trim _         = True
-
 

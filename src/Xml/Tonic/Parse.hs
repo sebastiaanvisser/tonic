@@ -6,15 +6,10 @@
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
   , GADTs
-  , ViewPatterns
   #-}
-module Xml.Tonic.Parse
-( 
-  -- * Top level XML parser.
-  xml
-)
-where
+module Xml.Tonic.Parse where
 
+import GHC.Int
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans
@@ -28,6 +23,9 @@ import qualified Data.Text.Lazy as T
 
 xml :: Text -> Xml [Node]
 xml = runParser nodeSet
+
+xmls :: Text -> [Xml Node]
+xmls = runParser (asMany node)
 
 node :: Parser (Maybe (Xml Node))
 node = token "<!--"      (Just . Comment               <$> until "-->")
@@ -110,9 +108,20 @@ until t = P $ \i ->
 
 token :: Text -> Parser a -> Parser a -> Parser a
 token t p q = P $ \i ->
-  case i of
-    (T.stripPrefix t -> Just j) -> runP p j
-    _                           -> runP q i
+  case {-# SCC "TOKEN" #-} stripPrefix t i of
+    Just j -> runP p j
+    _      -> runP q i
+
+stripPrefix :: Text -> Text -> Maybe Text
+stripPrefix p t
+  | p `T.isPrefixOf` t = Just (temp (T.length p) t)
+  | otherwise          = Nothing
+
+
+temp :: Int64 -> Text -> Text
+temp 0 t = t
+temp n t = temp (n - 1) (f t)
+  where f = snd . fromJust . T.uncons
 
 asMany :: Parser (Maybe a) -> Parser [a]
 asMany p = P $ \i ->
