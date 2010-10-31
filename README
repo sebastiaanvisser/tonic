@@ -12,7 +12,7 @@ Tonic provides:
     tree that conforms your expectations.
 
   - Performance: By using a specialized parser monad and only using Data.Text
-    as input, Tonic has very fast XML parser. For pretty-printing Tonic uses
+    as input, Tonic has a very fast XML parser. For pretty-printing Tonic uses
     the highly optimized Blaze-Builder package. This builder allows for pretty
     printing large quantities of XML blazingly fast.
 
