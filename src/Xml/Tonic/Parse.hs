@@ -18,7 +18,7 @@ import Data.Char
 import Data.Maybe
 import Data.Text.Lazy (Text)
 import Prelude hiding (until)
-import Xml.Tonic.Types
+import Xml.Tonic.Types hiding (nodeSet, attributeList, text, value)
 import qualified Data.Text.Lazy as T
 
 xml :: Text -> Xml [Node]

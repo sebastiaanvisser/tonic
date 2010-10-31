@@ -23,16 +23,16 @@ data Node
 data Attr
 
 data Xml n where
-  Element               :: Xml Name -> Xml [Attr] -> Xml [Node] -> Xml Node
-  Attribute             :: Xml Name -> Text                     -> Xml Attr
-  Text                  :: Text                                 -> Xml Node
-  CData                 :: Text                                 -> Xml Node
-  Comment               :: Text                                 -> Xml Node
-  Doctype               :: Text                                 -> Xml Node
-  ProcessingInstruction :: Text                                 -> Xml Node 
-  NodeSet               :: [Xml Node]                           -> Xml [Node] 
-  AttributeList         :: [Xml Attr]                           -> Xml [Attr] 
-  QualifiedName         :: Text                                 -> Xml Name
+  Element               :: { name          :: Xml Name,  attributes :: Xml [Attr], children :: Xml [Node] } -> Xml Node
+  Attribute             :: { key           :: Xml Name,  value      :: Text                               } -> Xml Attr
+  Text                  :: { text          :: Text                                                        } -> Xml Node
+  CData                 :: { cdata         :: Text                                                        } -> Xml Node
+  Comment               :: { comment       :: Text                                                        } -> Xml Node
+  Doctype               :: { docType       :: Text                                                        } -> Xml Node
+  ProcessingInstruction :: { instruction   :: Text                                                        } -> Xml Node 
+  NodeSet               :: { nodeSet       :: [Xml Node]                                                  } -> Xml [Node] 
+  AttributeList         :: { attributeList :: [Xml Attr]                                                  } -> Xml [Attr] 
+  QualifiedName         :: { qname         :: Text                                                        } -> Xml Name
 
 deriving instance Eq   (Xml n)
 deriving instance Show (Xml n)
