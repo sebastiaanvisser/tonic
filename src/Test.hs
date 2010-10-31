@@ -1,10 +1,16 @@
-{-# LANGUAGE GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, ScopedTypeVariables, OverloadedStrings #-}
 module Main where
 
-import Prelude hiding (until)
-import Xml.Tonic.Parse as Parse
-import Xml.Tonic.Print as Print
+import Control.Arrow
+import Control.Category
+import Control.Arrow.List
+import Xml.Tonic.Arrow
+import Prelude hiding (id, (.), elem)
+
+import qualified Xml.Tonic.Parse as Parse
+import qualified Xml.Tonic.Print as Print
 import qualified Data.Text.Lazy.IO as T
+
 
 main :: IO ()
 main =
@@ -12,9 +18,10 @@ main =
      f <- T.readFile "../tests/test.html"
      let parsed = Parse.xml f
      T.putStrLn (Print.pretty parsed)
-     _ <- getLine
+     putStrLn "-------------------------"
 
-     g <- T.readFile "../tests/single.html"
---      print (Parse.xml g)
-     T.putStr (Print.asis (Parse.xml g))
---      T.writeFile "../tests/out.html" (Print.pretty parsed)
+     mapM_ (T.putStrLn . Print.pretty) (runListArrow tr parsed)
+
+     where tr = parseXml . (arr (const "<span class=xxx></span>"))
+                <+> toCData . printXml . deepWhenNot (elem "xs:second") (elem "aap") . nodes
+
