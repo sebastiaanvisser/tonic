@@ -5,16 +5,13 @@
   , GADTs
   #-}
 
-{- |
-List arrows for querying, creating and modifying XML trees.
--}
+{- | List arrows for querying, creating and modifying XML trees. -}
 module Xml.Tonic.Arrow
 (
 
 -- * Selection.
 
-  nodes
-, attributes
+  attributes
 , children
 , key
 , name
@@ -35,15 +32,13 @@ module Xml.Tonic.Arrow
 , elem
 , attr
 , child
-
 , hasAttr
 
 -- * Deep selection.
 
 , deep
 , deepWhen
-, deepWhenNot
-, deepText
+, deepUnless
 
 -- * Creation with only arrow components.
 
@@ -70,13 +65,14 @@ module Xml.Tonic.Arrow
 
 , processChildren
 , processAttributes
+, modifyName
 , processText
 , processDeep
 
 -- * Parsing / printing.
 
-, printXml
-, parseXml
+-- , printXml
+-- , parseXml
 
 )
 where
@@ -84,136 +80,142 @@ where
 import Control.Arrow
 import Control.Arrow.ArrowList
 import Control.Category
-import Data.Text.Lazy
 import Prelude hiding (elem, (.), id, concat)
 import Xml.Tonic.Types hiding (name, key, value, attributes, children, text)
 import qualified Xml.Tonic.Types as X
-import qualified Xml.Tonic.Parse as Parse
-import qualified Xml.Tonic.Print as Print
+import qualified Data.Text.Lazy as T
 
-nodes :: ArrowList (~>) => Xml [Node] ~> Xml Node
-nodes = unlistA . arr nodeSet
+-- import qualified Xml.Tonic.Parse as Parse
+-- import qualified Xml.Tonic.Print as Print
 
-name :: ArrowList (~>) => Xml Node ~> Text
-name = arr (qname . X.name) . isElem
+name :: Arrow (~>) => Element ~> T.Text
+name = arr X.name
 
-children :: ArrowList (~>) => Xml Node ~> Xml Node
-children = arrL (nodeSet . X.children) . isElem
+children :: ArrowList (~>) => Element ~> Child
+children = arrL X.children
 
-attributes :: ArrowList (~>) => Xml Node ~> Xml Attr
-attributes = arrL (attributeList . X.attributes) . isElem
+attributes :: ArrowList (~>) => Element ~> Attribute
+attributes = arrL X.attributes
 
-key :: Arrow (~>) => Xml Attr ~> Text
-key = arr (qname . X.key)
+key :: Arrow (~>) => Attribute ~> T.Text
+key = arr X.key
 
-value :: Arrow (~>) => Xml Attr ~> Text
+value :: Arrow (~>) => Attribute ~> T.Text
 value = arr X.value
 
-text :: ArrowList (~>) => Xml Node ~> Text
-text = arr X.text . isText
+text :: ArrowList (~>) => Element ~> T.Text
+text = arr X.text . isText . children
 
-isElem, isText, isCData, isComment, isDoctype, isProcessingInstruction
-  :: ArrowList (~>) => Xml Node ~> Xml Node
+isElem :: ArrowList (~>) => Child ~> Element
+isElem = arrL (\c -> case c of ElementChild e -> [e]; _ -> [])
 
-isElem                  = isA (\c -> case c of Element               {} -> True; _ -> False)
-isText                  = isA (\c -> case c of Text                  {} -> True; _ -> False)
-isCData                 = isA (\c -> case c of CData                 {} -> True; _ -> False)
-isComment               = isA (\c -> case c of Comment               {} -> True; _ -> False)
-isDoctype               = isA (\c -> case c of Doctype               {} -> True; _ -> False)
-isProcessingInstruction = isA (\c -> case c of ProcessingInstruction {} -> True; _ -> False)
+isText :: ArrowList (~>) => Child ~> Text
+isText = arrL (\c -> case c of TextChild t -> [t]; _ -> [])
 
-elem :: (ArrowList (~>), ArrowChoice (~>)) => Text -> Xml Node ~> Xml Node
-elem n = filterA (isA (==n) . name . isElem)
+isCData :: ArrowList (~>) => Child ~> CData
+isCData = arrL (\c -> case c of CDataChild t -> [t]; _ -> [])
 
-attr :: (ArrowList (~>), ArrowChoice (~>)) => Text -> Xml Node ~> Text
+isComment :: ArrowList (~>) => Child ~> Comment
+isComment = arrL (\c -> case c of CommentChild t -> [t]; _ -> [])
+
+isDoctype :: ArrowList (~>) => Child ~> Doctype
+isDoctype = arrL (\c -> case c of DoctypeChild t -> [t]; _ -> [])
+
+isProcessingInstruction :: ArrowList (~>) => Child ~> ProcessingInstruction
+isProcessingInstruction = arrL (\c -> case c of ProcessingInstructionChild p -> [p]; _ -> [])
+
+elem :: (ArrowList (~>), ArrowChoice (~>)) => T.Text -> Element ~> Element
+elem n = filterA (isA (==n) . name)
+
+attr :: (ArrowChoice (~>), ArrowList (~>)) => T.Text -> Element ~> T.Text
 attr n = key . filterA (isA (==n) . value) . attributes
 
-child :: (ArrowList (~>), ArrowChoice (~>)) => Text -> Xml Node ~> Xml Node
-child n = elem n . children
+child :: (ArrowList (~>), ArrowChoice (~>)) => T.Text -> Element ~> Element
+child n = elem n . isElem . children
 
-hasAttr :: (ArrowList (~>), ArrowChoice (~>)) => Text -> Xml Node ~> Xml Node
+hasAttr :: (ArrowList (~>), ArrowChoice (~>)) => T.Text -> Element ~> Element
 hasAttr n = filterA (isA (==n) . key . attributes)
 
-deep :: (ArrowList (~>), ArrowPlus (~>)) => (Xml Node ~> a) -> (Xml Node ~> a)
-deep e = e <+> deep e . children
+deep :: (ArrowList a, ArrowPlus a) => a Element c -> a Element c
+deep e = e <+> deep e . isElem . children
 
-deepWhen :: (ArrowList (~>), ArrowPlus (~>), ArrowChoice (~>)) => Xml Node ~> c -> Xml Node ~> a -> Xml Node ~> a
-deepWhen g e = e <+> g `guards` deepWhen g e . children
+deepWhen :: (ArrowList (~>), ArrowPlus (~>), ArrowChoice (~>)) => Element ~> c -> Element ~> a -> Element ~> a
+deepWhen g e = e <+> g `guards` deepWhen g e . isElem . children
 
-deepWhenNot :: (ArrowList (~>), ArrowPlus (~>), ArrowChoice (~>)) => Xml Node ~> c -> Xml Node ~> a -> Xml Node ~> a
-deepWhenNot g = deepWhen (notA g)
+deepUnless :: (ArrowList (~>), ArrowPlus (~>), ArrowChoice (~>)) => Element ~> c -> Element ~> a -> Element ~> a
+deepUnless g = deepWhen (notA g)
 
-deepText :: (ArrowPlus (~>), ArrowList (~>)) => Xml Node ~> Text
-deepText = arr concat . collect (deep text)
-
-toElem :: (ArrowPlus (~>), ArrowList (~>)) => (a ~> Text) -> [a ~> Xml Attr] -> [a ~> Xml Node] -> a ~> Xml Node
+toElem :: (ArrowPlus (~>), ArrowList (~>)) => (a ~> T.Text) -> [a ~> Attribute] -> [a ~> Child] -> a ~> Child
 toElem q as cs = proc i ->
   do n <- q -< i
-     a <- collect (concatA as) -< i
-     c <- collect (concatA cs) -< i
-     id -< Element (QualifiedName n) (AttributeList a) (NodeSet c)
+     a <- list (concatA as) -< i
+     c <- list (concatA cs) -< i
+     id -< ElementChild (Element n a c)
 
-toAttr :: Arrow (~>) => (a ~> Text) -> (a ~> Text) -> a ~> Xml Attr
+toAttr :: (Arrow (~>)) => (a ~> T.Text) -> (a ~> T.Text) -> a ~> Attribute
 toAttr q s = proc i ->
   do n <- q -< i
      v <- s -< i
-     id -< Attribute (QualifiedName n) v
+     id -< Attribute n v
 
-toText :: Arrow (~>) => Text ~> Xml Node
-toText = arr Text
+toText :: Arrow (~>) => T.Text ~> Child
+toText = arr (TextChild . Text)
 
-toCData :: Arrow (~>) => Text ~> Xml Node
-toCData = arr CData
+toCData :: Arrow (~>) => T.Text ~> Child
+toCData = arr (CDataChild . CData)
 
-toComment :: Arrow (~>) => Text ~> Xml Node
-toComment = arr Comment
+toComment :: Arrow (~>) => T.Text ~> Child
+toComment = arr (CommentChild . Comment)
 
-toDoctype :: Arrow (~>) => Text ~> Xml Node
-toDoctype = arr Doctype
+toDoctype :: Arrow (~>) => T.Text ~> Child
+toDoctype = arr (DoctypeChild . Doctype)
 
-toProcessingInstruction :: Arrow (~>) => Text ~> Xml Node
-toProcessingInstruction = arr ProcessingInstruction
+toProcessingInstruction :: Arrow (~>) => T.Text ~> Child
+toProcessingInstruction = arr (ProcessingInstructionChild . ProcessingInstruction)
 
 mkElem :: (ArrowPlus (~>), ArrowList (~>))
-        => Text -> [a ~> Xml Attr] -> [a ~> Xml Node] -> a ~> Xml Node
+        => T.Text -> [a ~> Attribute] -> [a ~> Child] -> a ~> Child
 mkElem n = toElem (arr (const n))
 
-mkAttr :: Arrow (~>) => Text -> Text ~> Xml Attr
+mkAttr :: Arrow (~>) => T.Text -> T.Text ~> Attribute
 mkAttr k = toAttr (arr (const k)) id
 
-mkAttrValue :: Arrow (~>) => Text -> Text -> a ~> Xml Attr
+mkAttrValue :: Arrow (~>) => T.Text -> T.Text -> a ~> Attribute
 mkAttrValue k v = mkAttr k . arr (const v)
 
-mkText :: Arrow (~>) => Text -> a ~> Xml Node
+mkText :: Arrow (~>) => T.Text -> a ~> Child
 mkText t = toText . arr (const t)
 
-mkCData :: Arrow (~>) => Text -> a ~> Xml Node
+mkCData :: Arrow (~>) => T.Text -> a ~> Child
 mkCData t = toCData . arr (const t)
 
-mkComment :: Arrow (~>) => Text -> a ~> Xml Node
+mkComment :: Arrow (~>) => T.Text -> a ~> Child
 mkComment t = toComment . arr (const t)
 
-mkDoctype :: Arrow (~>) => Text -> a ~> Xml Node
+mkDoctype :: Arrow (~>) => T.Text -> a ~> Child
 mkDoctype t = toDoctype . arr (const t)
 
-mkProcessingInstruction :: Arrow (~>) => Text -> a ~> Xml Node
+mkProcessingInstruction :: Arrow (~>) => T.Text -> a ~> Child
 mkProcessingInstruction t = toProcessingInstruction . arr (const t)
 
-processChildren :: (ArrowList (~>), ArrowChoice (~>), ArrowPlus (~>)) => (Xml Node ~> Xml Node) -> Xml Node ~> Xml Node
-processChildren p = toElem name [attributes] [p . children] `when` isElem
+processChildren :: (ArrowPlus (~>), ArrowList (~>)) => (Element ~> Child) -> Element ~> Child
+processChildren p = toElem name [attributes] [p] 
 
-processAttributes :: (ArrowList (~>), ArrowChoice (~>), ArrowPlus (~>)) => (Xml Attr ~> Xml Attr) -> Xml Node ~> Xml Node
-processAttributes p = toElem name [p . attributes] [children] `when` isElem
+processAttributes :: (ArrowList (~>), ArrowPlus (~>), ArrowChoice (~>)) => (Element ~> Attribute) -> Element ~> Child
+processAttributes p = toElem name [p] [children]
 
-processText :: ArrowList (~>) => Text ~> Text -> Xml Node ~> Xml Node
+modifyName :: (ArrowList (~>), ArrowPlus (~>), ArrowChoice (~>)) => (Element ~> T.Text) -> Element ~> Child
+modifyName p = toElem p [attributes] [children]
+
+processText :: ArrowList (~>) => T.Text ~> T.Text -> Element ~> Child
 processText a = toText . a . text
 
-processDeep :: (ArrowList (~>), ArrowChoice (~>), ArrowPlus (~>)) => Xml Node ~> c -> Xml Node ~> Xml Node -> Xml Node ~> Xml Node
+processDeep :: (ArrowList (~>), ArrowChoice (~>), ArrowPlus (~>)) => (Element ~> c) -> (Element ~> Child) -> Element ~> Child
 processDeep c a = ifA c a (processChildren (processDeep c a))
 
-printXml :: Arrow (~>) => Xml Node ~> Text
-printXml = arr Print.pretty
+-- printXml :: Arrow (~>) => Element ~> T.Text
+-- printXml = arr Print.pretty
 
-parseXml :: ArrowList (~>) => Text ~> Xml Node
-parseXml = nodes . arr Parse.xml
+-- parseXml :: ArrowList (~>) => T.Text ~> Element
+-- parseXml = nodes . arr Parse.xml
 

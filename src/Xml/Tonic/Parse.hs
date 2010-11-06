@@ -9,46 +9,42 @@
   #-}
 module Xml.Tonic.Parse where
 
-import GHC.Int
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.Maybe
 import Data.Char
 import Data.Maybe
-import Data.Text.Lazy (Text)
+import GHC.Int
 import Prelude hiding (until)
-import Xml.Tonic.Types hiding (nodeSet, attributeList, text, value)
 import qualified Data.Text.Lazy as T
+import qualified Xml.Tonic.Types as X
 
-xml :: Text -> Xml [Node]
-xml = runParser nodeSet
+xml :: T.Text -> X.ChildNodes
+xml = runParser (asMany node)
 
-xmls :: Text -> [Xml Node]
-xmls = runParser (asMany node)
+node :: Parser (Maybe X.Child)
+node = token "<!--"      (Just . X.CommentChild               . X.Comment               <$> until "-->")
+     . token "<![CDATA[" (Just . X.CDataChild                 . X.CData                 <$> until "]]>")
+     . token "<!"        (Just . X.DoctypeChild               . X.Doctype               <$> until ">")
+     . token "<?"        (Just . X.ProcessingInstructionChild . X.ProcessingInstruction <$> until "?>")
+     $ token "<"         (fmap X.ElementChild <$> element)
+                         (fmap X.TextChild    <$> text')
 
-node :: Parser (Maybe (Xml Node))
-node = token "<!--"      (Just . Comment               <$> until "-->")
-     . token "<![CDATA[" (Just . CData                 <$> until "]]>")
-     . token "<!"        (Just . Doctype               <$> until ">")
-     . token "<?"        (Just . ProcessingInstruction <$> until "?>")
-     $ token "<"         element
-                         text
+text' :: Parser (Maybe X.Text)
+text' = fmap X.Text <$> while (/= '<')
 
-text :: Parser (Maybe (Xml Node))
-text = fmap Text <$> while (/= '<')
+element :: Parser (Maybe X.Element)
+element =
+  do tag <- while (not . (`elem` " \r\n/>"))
+     case tag of
+       Nothing -> return Nothing
+       Just t  ->
+         do space
+            a <- attributeList
+            s <- self
+            c <- if s then nodeSet <* close t else pure []
+            return (Just (X.Element t a c))
 
-element :: Parser (Maybe (Xml Node))
-element = runMaybeT $
-  do tag <- MaybeT (while (not . (`elem` " \r\n/>")))
-     lift $
-       do space
-          a <- attributeList
-          s <- self
-          c <- if s then nodeSet <* close tag else pure (NodeSet [])
-          return (Element (QualifiedName tag) a c)
-
-close :: Text -> Parser ()
+close :: T.Text -> Parser ()
 close w = token ("</" `T.append` w `T.append` ">") (pure ()) (pure ())
 
 self :: Parser Bool
@@ -56,20 +52,23 @@ self = token ">"  (pure True)
      $ token "/>" (pure False)
                   (pure False)
 
-nodeSet :: Parser (Xml [Node])
-nodeSet = NodeSet <$> asMany node
+nodeSet :: Parser X.ChildNodes
+nodeSet = asMany node
 
-attributeList :: Parser (Xml [Attr])
-attributeList = AttributeList <$> asMany (space *> attribute)
+attributeList :: Parser X.Attributes
+attributeList = asMany (space *> attribute)
 
-attribute :: Parser (Maybe (Xml Attr))
-attribute = runMaybeT $
-  do k <- MaybeT (while (not . (`elem` " \r\n=>/")))
-     v <- lift value
-     return (Attribute (QualifiedName k) v)
+attribute :: Parser (Maybe X.Attribute)
+attribute =
+  do k <- while (not . (`elem` " \r\n=>/"))
+     case k of
+       Nothing -> return Nothing
+       Just key ->
+         do v <- space *> value'
+            return (Just (X.Attribute key v))
 
-value :: Parser Text
-value = fromMaybe "" <$> token "=" (Just <$> doubleQuoted (singleQuoted unquoted)) (pure Nothing)
+value' :: Parser T.Text
+value' = fromMaybe "" <$> token "=" (space *> (Just <$> doubleQuoted (singleQuoted unquoted))) (pure Nothing)
   where doubleQuoted = token "\"" (until "\"")
         singleQuoted = token "\'" (until "\'")
         unquoted     = fromMaybe "" <$> while (not . (`elem` " \r\n>/"))
@@ -79,10 +78,10 @@ space = () <$ while isSpace
 
 -------------------------------------------------------------------------------
 
-newtype Parser a = P { runP :: Text -> (Text, a) }
+newtype Parser a = P { runP :: T.Text -> (T.Text, a) }
   deriving Functor
 
-runParser :: Parser b -> Text -> b
+runParser :: Parser b -> T.Text -> b
 runParser p = snd . runP p
 
 instance Applicative Parser where
@@ -93,32 +92,31 @@ instance Monad Parser where
   return a = P (\t -> (t, a))
   a >>= b  = P (\t -> let (u, x) = runP a t in runP (b x) u)
 
-while :: (Char -> Bool) -> Parser (Maybe Text)
+while :: (Char -> Bool) -> Parser (Maybe T.Text)
 while f = P $ \i ->
   let v = T.takeWhile f i
   in if T.null v
      then (i, Nothing)
      else (T.drop (T.length v) i, Just v)
 
-until :: Text -> Parser Text
+until :: T.Text -> Parser T.Text
 until t = P $ \i ->
   case T.find t i of
     []       -> ("", i)
     (v, r):_ -> (T.drop (T.length t) r, v)
 
-token :: Text -> Parser a -> Parser a -> Parser a
+token :: T.Text -> Parser a -> Parser a -> Parser a
 token t p q = P $ \i ->
   case {-# SCC "TOKEN" #-} stripPrefix t i of
     Just j -> runP p j
     _      -> runP q i
 
-stripPrefix :: Text -> Text -> Maybe Text
+stripPrefix :: T.Text -> T.Text -> Maybe T.Text
 stripPrefix p t
   | p `T.isPrefixOf` t = Just (temp (T.length p) t)
   | otherwise          = Nothing
 
-
-temp :: Int64 -> Text -> Text
+temp :: Int64 -> T.Text -> T.Text
 temp 0 t = t
 temp n t = temp (n - 1) (f t)
   where f = snd . fromJust . T.uncons

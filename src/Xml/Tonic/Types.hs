@@ -4,36 +4,45 @@
   , EmptyDataDecls
   , StandaloneDeriving
   #-}
-module Xml.Tonic.Types
-(
--- * Xml datatype as a family of types encoded in a single GADT.
- Xml (..)
+module Xml.Tonic.Types where
 
--- * Phantom types as index for the 'Xml' family.
-, Name
-, Node
-, Attr
-)
-where
+import qualified Data.Text.Lazy as T
 
-import Data.Text.Lazy
+data Element = Element
+  { name       :: T.Text
+  , attributes :: Attributes
+  , children   :: ChildNodes
+  } deriving (Eq, Show, Ord)
 
-data Name
-data Node
-data Attr
+data Attribute = Attribute
+  { key   :: T.Text
+  , value :: T.Text
+  } deriving (Eq, Show, Ord)
 
-data Xml n where
-  Element               :: { name          :: Xml Name,  attributes :: Xml [Attr], children :: Xml [Node] } -> Xml Node
-  Attribute             :: { key           :: Xml Name,  value      :: Text                               } -> Xml Attr
-  Text                  :: { text          :: Text                                                        } -> Xml Node
-  CData                 :: { cdata         :: Text                                                        } -> Xml Node
-  Comment               :: { comment       :: Text                                                        } -> Xml Node
-  Doctype               :: { docType       :: Text                                                        } -> Xml Node
-  ProcessingInstruction :: { instruction   :: Text                                                        } -> Xml Node 
-  NodeSet               :: { nodeSet       :: [Xml Node]                                                  } -> Xml [Node] 
-  AttributeList         :: { attributeList :: [Xml Attr]                                                  } -> Xml [Attr] 
-  QualifiedName         :: { qname         :: Text                                                        } -> Xml Name
+newtype Text = Text { text :: T.Text }
+  deriving (Eq, Show, Ord)
 
-deriving instance Eq   (Xml n)
-deriving instance Show (Xml n)
+newtype CData = CData { cdata :: T.Text }
+  deriving (Eq, Show, Ord)
+
+newtype Comment = Comment { comment :: T.Text }
+  deriving (Eq, Show, Ord)
+
+newtype Doctype = Doctype { docType :: T.Text }
+  deriving (Eq, Show, Ord)
+
+newtype ProcessingInstruction = ProcessingInstruction { instruction :: T.Text }
+  deriving (Eq, Show, Ord)
+
+type ChildNodes = [Child]
+type Attributes = [Attribute]
+
+data Child
+  = ElementChild               { elementChild               :: Element               }
+  | TextChild                  { textChild                  :: Text                  }
+  | CDataChild                 { cdataChild                 :: CData                 }
+  | CommentChild               { commentChild               :: Comment               }
+  | DoctypeChild               { doctypeChild               :: Doctype               }
+  | ProcessingInstructionChild { processingInstructionChild :: ProcessingInstruction }
+  deriving (Eq, Show, Ord)
 
