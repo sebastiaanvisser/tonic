@@ -8,10 +8,23 @@ module Xml.Tonic.Types where
 
 import qualified Data.Text.Lazy as T
 
+type Xml        = Nodes
+type Nodes      = [Node]
+type Attributes = [Attribute]
+
+data Node
+  = ElementNode               { elementNode               :: Element               }
+  | TextNode                  { textNode                  :: Text                  }
+  | CDataNode                 { cdataNode                 :: CData                 }
+  | CommentNode               { commentNode               :: Comment               }
+  | DoctypeNode               { doctypeNode               :: Doctype               }
+  | ProcessingInstructionNode { processingInstructionNode :: ProcessingInstruction }
+  deriving (Eq, Show, Ord)
+
 data Element = Element
   { name       :: T.Text
   , attributes :: Attributes
-  , children   :: ChildNodes
+  , children   :: Nodes
   } deriving (Eq, Show, Ord)
 
 data Attribute = Attribute
@@ -28,21 +41,9 @@ newtype CData = CData { cdata :: T.Text }
 newtype Comment = Comment { comment :: T.Text }
   deriving (Eq, Show, Ord)
 
-newtype Doctype = Doctype { docType :: T.Text }
+newtype Doctype = Doctype { doctype :: T.Text }
   deriving (Eq, Show, Ord)
 
 newtype ProcessingInstruction = ProcessingInstruction { instruction :: T.Text }
-  deriving (Eq, Show, Ord)
-
-type ChildNodes = [Child]
-type Attributes = [Attribute]
-
-data Child
-  = ElementChild               { elementChild               :: Element               }
-  | TextChild                  { textChild                  :: Text                  }
-  | CDataChild                 { cdataChild                 :: CData                 }
-  | CommentChild               { commentChild               :: Comment               }
-  | DoctypeChild               { doctypeChild               :: Doctype               }
-  | ProcessingInstructionChild { processingInstructionChild :: ProcessingInstruction }
   deriving (Eq, Show, Ord)
 

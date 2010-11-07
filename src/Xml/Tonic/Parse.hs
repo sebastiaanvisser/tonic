@@ -7,32 +7,62 @@
   , MultiParamTypeClasses
   , GADTs
   #-}
-module Xml.Tonic.Parse where
+module Xml.Tonic.Parse
+(
+
+-- * Top level XML parser.
+  xml
+
+-- * Individual parsers.
+, nodes
+, node
+, text
+, element
+, close
+, self
+, attributeList
+, attribute
+, value
+, space
+
+-- * Parse monad.
+, Parser 
+, runParser
+
+-- * Primitive parsers.
+, while
+, until
+, token
+, asMany
+)
+where
 
 import Control.Applicative
 import Control.Monad
 import Data.Char
 import Data.Maybe
-import GHC.Int
 import Prelude hiding (until)
 import qualified Data.Text.Lazy as T
 import qualified Xml.Tonic.Types as X
 
-xml :: T.Text -> X.ChildNodes
+xml :: T.Text -> X.Xml
 xml = runParser (asMany node)
 
-node :: Parser (Maybe X.Child)
-node = token "<!--"      (Just . X.CommentChild               . X.Comment               <$> until "-->")
-     . token "<![CDATA[" (Just . X.CDataChild                 . X.CData                 <$> until "]]>")
-     . token "<!"        (Just . X.DoctypeChild               . X.Doctype               <$> until ">")
-     . token "<?"        (Just . X.ProcessingInstructionChild . X.ProcessingInstruction <$> until "?>")
-     $ token "<"         (fmap X.ElementChild <$> element)
-                         (fmap X.TextChild    <$> text')
+nodes :: Parser X.Nodes
+nodes = asMany node
 
-text' :: Parser (Maybe X.Text)
-text' = fmap X.Text <$> while (/= '<')
+node :: Parser (Maybe X.Node)
+node = token "<!--"      (Just . X.CommentNode               . X.Comment               <$> until "-->")
+     . token "<![CDATA[" (Just . X.CDataNode                 . X.CData                 <$> until "]]>")
+     . token "<!"        (Just . X.DoctypeNode               . X.Doctype               <$> until ">")
+     . token "<?"        (Just . X.ProcessingInstructionNode . X.ProcessingInstruction <$> until "?>")
+     $ token "<"         element
+                         text
 
-element :: Parser (Maybe X.Element)
+text :: Parser (Maybe X.Node)
+text = fmap (X.TextNode . X.Text) <$> while (/= '<')
+
+element :: Parser (Maybe X.Node)
 element =
   do tag <- while (not . (`elem` " \r\n/>"))
      case tag of
@@ -41,8 +71,8 @@ element =
          do space
             a <- attributeList
             s <- self
-            c <- if s then nodeSet <* close t else pure []
-            return (Just (X.Element t a c))
+            c <- if s then nodes <* close t else pure []
+            c `seq` return (Just (X.ElementNode (X.Element t a c)))
 
 close :: T.Text -> Parser ()
 close w = token ("</" `T.append` w `T.append` ">") (pure ()) (pure ())
@@ -51,9 +81,6 @@ self :: Parser Bool
 self = token ">"  (pure True)
      $ token "/>" (pure False)
                   (pure False)
-
-nodeSet :: Parser X.ChildNodes
-nodeSet = asMany node
 
 attributeList :: Parser X.Attributes
 attributeList = asMany (space *> attribute)
@@ -64,11 +91,11 @@ attribute =
      case k of
        Nothing -> return Nothing
        Just key ->
-         do v <- space *> value'
+         do v <- space *> value
             return (Just (X.Attribute key v))
 
-value' :: Parser T.Text
-value' = fromMaybe "" <$> token "=" (space *> (Just <$> doubleQuoted (singleQuoted unquoted))) (pure Nothing)
+value :: Parser T.Text
+value = fromMaybe "" <$> token "=" (space *> (Just <$> doubleQuoted (singleQuoted unquoted))) (pure Nothing)
   where doubleQuoted = token "\"" (until "\"")
         singleQuoted = token "\'" (until "\'")
         unquoted     = fromMaybe "" <$> while (not . (`elem` " \r\n>/"))
@@ -107,19 +134,9 @@ until t = P $ \i ->
 
 token :: T.Text -> Parser a -> Parser a -> Parser a
 token t p q = P $ \i ->
-  case {-# SCC "TOKEN" #-} stripPrefix t i of
+  case T.stripPrefix t i of
     Just j -> runP p j
     _      -> runP q i
-
-stripPrefix :: T.Text -> T.Text -> Maybe T.Text
-stripPrefix p t
-  | p `T.isPrefixOf` t = Just (temp (T.length p) t)
-  | otherwise          = Nothing
-
-temp :: Int64 -> T.Text -> T.Text
-temp 0 t = t
-temp n t = temp (n - 1) (f t)
-  where f = snd . fromJust . T.uncons
 
 asMany :: Parser (Maybe a) -> Parser [a]
 asMany p = P $ \i ->

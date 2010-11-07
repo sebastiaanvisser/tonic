@@ -1,5 +1,23 @@
 {-# LANGUAGE OverloadedStrings, GADTs #-}
-module Xml.Tonic.Print where
+module Xml.Tonic.Print
+(
+
+-- * Top level XML printer.
+  xml
+
+-- * Text builders.
+, element
+, nodes
+, node
+, attributes
+, attribute
+, text
+, cdata
+, comment
+, doctype
+, processingInstruction
+)
+where
 
 import Data.Monoid
 import Data.Text.Lazy.Builder
@@ -9,12 +27,23 @@ import qualified Xml.Tonic.Types as X
 (<>) :: Monoid a => a -> a -> a
 (<>) = mappend
 
-xml :: [X.Child] -> T.Text
-xml = toLazyText . mconcat . children
+xml :: X.Xml -> T.Text
+xml = toLazyText . mconcat . nodes
+
+nodes :: [X.Node] -> [Builder]
+nodes = concatMap node
+
+node :: X.Node -> [Builder]
+node (X.ElementNode               t) = element               t
+node (X.TextNode                  t) = text                  t
+node (X.CDataNode                 t) = cdata                 t
+node (X.CommentNode               t) = comment               t
+node (X.DoctypeNode               t) = doctype               t
+node (X.ProcessingInstructionNode t) = processingInstruction t
 
 element :: X.Element -> [Builder]
 element (X.Element n a c) =
-  let subs   = children c
+  let subs   = nodes c
       attrs  = mconcat (attributes a)
       open s = "<" <> fromLazyText n <> attrs
                    <> if s then "/>" else ">"
@@ -23,19 +52,8 @@ element (X.Element n a c) =
     [] -> open True  : subs
     _  -> open False : subs ++ [close]
 
-children :: [X.Child] -> [Builder]
-children = concatMap child
-
-child :: X.Child -> [Builder]
-child (X.ElementChild               t) = element               t
-child (X.TextChild                  t) = text                  t
-child (X.CDataChild                 t) = cdata                 t
-child (X.CommentChild               t) = comment               t
-child (X.DoctypeChild               t) = doctype               t
-child (X.ProcessingInstructionChild t) = processingInstruction t
-
 attributes :: [X.Attribute] -> [Builder]
-attributes = concatMap attribute
+attributes = concatMap (mappend [" "] . attribute)
 
 attribute :: X.Attribute -> [Builder]
 attribute (X.Attribute k v) = [fromLazyText k <> "=\"" <> fromLazyText v <> "\""]

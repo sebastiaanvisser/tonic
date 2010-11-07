@@ -1,5 +1,5 @@
 Name:             tonic
-Version:          0.0.1
+Version:          0.0.2
 Synopsis:         Fast, lazy and simple XML.
 Description:      This package is called tonic because it is not.
 Category:         Data, Xml, Html
