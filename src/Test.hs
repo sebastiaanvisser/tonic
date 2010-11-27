@@ -20,5 +20,5 @@ main =
   where
     transform tr = runListArrow tr . Parse.xml
 
-    myTransformation = attr "href" . deep (elem "a") . isElem . unlist
+    myTransformation = {-# SCC "name" #-} attr "href" . deep (elem "a") . isElem . unlist
 

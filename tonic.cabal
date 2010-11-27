@@ -11,22 +11,23 @@ Build-Type:       Simple
 Cabal-Version:    >= 1.2
 
 Library
-  GHC-Options:      -threaded -Wall -O
-  HS-Source-Dirs:   src
+  GHC-Options:     -threaded -Wall -O
+  HS-Source-Dirs:  src
 
-  Build-Depends:    base         >= 4   && < 5
-                  , text         >= 0.9 && < 0.10
-                  , mtl          == 2.0.*
-                  , arrow-list   == 0.1.*
+  Build-Depends:   base         >= 4   && < 5
+                 , text         >= 0.9 && < 0.10
+                 , mtl          == 2.0.*
+                 , arrow-list   == 0.1.*
 
-  Exposed-modules:  Xml.Tonic.Types
-                    Xml.Tonic.Parse
-                    Xml.Tonic.Print
-                    Xml.Tonic.Arrow
+  Exposed-modules: Xml.Tonic
+                   Xml.Tonic.Types
+                   Xml.Tonic.Parse
+                   Xml.Tonic.Print
+                   Xml.Tonic.Arrow
 
-Executable          xml-text
-  Executable:       xml-text
-  Main-is:          Test.hs
-  GHC-Options:      -threaded -Wall
-  HS-Source-Dirs:   src
+Executable         xml-text
+  Executable:      xml-text
+  Main-is:         Test.hs
+  GHC-Options:     -threaded -Wall
+  HS-Source-Dirs:  src
 
