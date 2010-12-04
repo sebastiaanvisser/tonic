@@ -162,9 +162,9 @@ while f = P $ \i ->
 
 until :: T.Text -> Parser T.Text
 until t = P $ \i ->
-  case T.find t i of
-    []       -> ("", i)
-    (v, r):_ -> (T.drop (T.length t) r, v)
+  case T.breakOn t i of
+    (_, "") -> ("", i)
+    (v, r ) -> (T.drop (T.length t) r, v)
 
 -- | Parse a single token, when it succeeds continue with the first parser,
 -- when then token can not be recognized continue with the second parser.
