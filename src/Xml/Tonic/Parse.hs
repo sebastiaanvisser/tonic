@@ -15,7 +15,6 @@ module Xml.Tonic.Parse
   xml
 
 -- * Individual parsers.
-, nodes
 , node
 , element
 , close
@@ -38,7 +37,6 @@ module Xml.Tonic.Parse
 )
 where
 
-import Control.Applicative
 import Control.Monad
 import Data.Char
 import Data.Maybe
@@ -59,19 +57,16 @@ import qualified Xml.Tonic.Types as X
 xml :: T.Text -> X.Xml
 xml = parse (asMany node)
 
-nodes :: Parser [X.Node]
-nodes = asMany node
-
 node :: Parser (Maybe X.Node)
 node =
   token "<"
     ( token "!"
-        ( token "--"      (Just . X.CommentNode               . X.Comment               <$> until "-->")
-        $ token "[CDATA[" (Just . X.CDataNode                 . X.CData                 <$> until "]]>")
-                          (Just . X.DoctypeNode               . X.Doctype               <$> until ">"))
-      . token "?"         (Just . X.ProcessingInstructionNode . X.ProcessingInstruction <$> until "?>")
+        ( token "--"      ((Just . X.CommentNode               . X.Comment              ) `fmap` until "-->")
+        $ token "[CDATA[" ((Just . X.CDataNode                 . X.CData                ) `fmap` until "]]>")
+                          ((Just . X.DoctypeNode               . X.Doctype              ) `fmap` until ">"))
+      . token "?"         ((Just . X.ProcessingInstructionNode . X.ProcessingInstruction) `fmap` until "?>")
       $ element
-    ) (fmap (X.TextNode . X.Text) <$> while (/= '<'))
+    ) (fmap (X.TextNode . X.Text) `fmap` while (/= '<'))
 
 element :: Parser (Maybe X.Node)
 element =
@@ -79,23 +74,26 @@ element =
      case tag of
        Nothing -> return Nothing
        Just t  ->
-         do space
+         do _ <- space
             a <- attributeList
             s <- self
-            c <- if s then nodes <* close t else pure []
-            let e = X.ElementNode (X.Element t a c)
-            return (Just e)
+            c <- if s then
+                    do ns <- asMany node
+                       close t
+                       return ns
+                 else return []
+            return (Just (X.ElementNode (X.Element t a c)))
 
 close :: T.Text -> Parser ()
-close w = token ("</" `T.append` w `T.append` ">") (pure ()) (pure ())
+close w = token ("</" `T.append` w `T.append` ">") (return ()) (return ())
 
 self :: Parser Bool
-self = token ">"  (pure True)
-     $ token "/>" (pure False)
-                  (pure False)
+self = token ">"  (return True)
+     $ token "/>" (return False)
+                  (return False)
 
 attributeList :: Parser [X.Attribute]
-attributeList = asMany (space *> attribute)
+attributeList = asMany (space >> attribute)
 
 attribute :: Parser (Maybe X.Attribute)
 attribute =
@@ -103,25 +101,25 @@ attribute =
      case k of
        Nothing -> return Nothing
        Just key ->
-         do v <- space *> value
+         do v <- space >> value
             return (Just (X.Attribute key v))
 
 value :: Parser T.Text
-value = fromMaybe "" <$> token "=" (space *> (Just <$> doubleQuoted (singleQuoted unquoted))) (pure Nothing)
+value = fromMaybe "" `fmap` token "=" (space >> (Just `fmap` doubleQuoted (singleQuoted unquoted))) (return Nothing)
   where doubleQuoted = token "\"" (until "\"")
         singleQuoted = token "\'" (until "\'")
-        unquoted     = fromMaybe "" <$> while (not . (`elem` " \n>/"))
+        unquoted     = fromMaybe "" `fmap` while (not . (`elem` " \n>/"))
 
-space :: Parser ()
-space = () <$ while isSpace
+space :: Parser (Maybe T.Text)
+space = while isSpace
 
 -------------------------------------------------------------------------------
 
 -- | A very simple parser context for parsers that cannot fail. Because no
 -- failure is possible by default we can do without any 'MonadPlus' and
 -- 'Alternative' instances, which allows us to perform lazy online parsing.
--- Besides an 'Applicative' instance also a 'Monad' instance is provided,
--- because the open and close tags XML requires context-sensitive parsing.
+-- A 'Monad' instance is provided, because the open and close tags XML requires
+-- context-sensitive parsing.
 --
 -- When some specific parser actually has the ability to fail (by not consume
 -- any input) it can make this explicit by using a 'Maybe' result value.
@@ -143,10 +141,6 @@ parse p = snd . runP p
 instance Monad Parser where
   return a = P (,a)
   a >>= b  = P (\t -> let (u, x) = runP a t in runP (b x) u)
-
-instance Applicative Parser where
-  pure  = return
-  (<*>) = ap
 
 -- | Consume the input text as long as the predicate holds. When no input can
 -- be consumed the parser fails.
