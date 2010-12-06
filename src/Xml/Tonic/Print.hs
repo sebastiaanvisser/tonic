@@ -2,10 +2,11 @@
 module Xml.Tonic.Print
 (
 
--- * Top level XML printer.
+-- * Top level XML printers.
   xml
+-- , compact
 
--- * Text builders.
+-- * As-is text builders.
 , element
 , nodes
 , node
@@ -16,6 +17,12 @@ module Xml.Tonic.Print
 , comment
 , doctype
 , processingInstruction
+
+-- Compact text builders.
+-- , elementC
+-- , nodesC
+-- , nodeC
+-- , textC
 )
 where
 
@@ -27,8 +34,21 @@ import qualified Xml.Tonic.Types as X
 (<>) :: Monoid a => a -> a -> a
 (<>) = mappend
 
+-- | Print an XML tree to a lazy text.
+
+-- (parse . print == id) is guaranteed, (parse . print == id) is /not/ guaranteed.
+
 xml :: X.Xml -> T.Text
 xml = toLazyText . mconcat . nodes
+
+-- | Print an XML tree to a lazy text in a compacted form, stripped from redundant whitespace.
+
+-- Both (parse . print == id) and (parse . print == id) are /not/ guaranteed.
+
+-- compact :: X.Xml -> T.Text
+-- compact = toLazyText . mconcat . nodesC
+
+-- As-is builders.
 
 nodes :: [X.Node] -> [Builder]
 nodes = concatMap node
@@ -72,4 +92,36 @@ doctype (X.Doctype d) = ["<!" <> fromLazyText d <> " >"]
 
 processingInstruction :: X.ProcessingInstruction -> [Builder]
 processingInstruction (X.ProcessingInstruction i) = ["<?" <> fromLazyText i <> " ?>"]
+
+{-
+
+-- Compact builders.
+
+nodesC :: [X.Node] -> [Builder]
+nodesC = concatMap nodeC
+
+nodeC :: X.Node -> [Builder]
+nodeC (X.ElementNode               t) = elementC              t
+nodeC (X.TextNode                  t) = textC                 t
+nodeC (X.CDataNode                 t) = cdata                 t
+nodeC (X.CommentNode               t) = comment               t
+nodeC (X.DoctypeNode               t) = doctype               t
+nodeC (X.ProcessingInstructionNode t) = processingInstruction t
+
+elementC :: X.Element -> [Builder]
+elementC (X.Element n a c) =
+  let subs   = nodesC c
+      attrs  = mconcat (attributes a)
+      open s = "<" <> fromLazyText n <> attrs
+                   <> if s then "/>" else ">"
+      close  = "</" <> fromLazyText n <> ">"
+  in case subs of
+    [] -> open True  : subs
+    _  -> open False : subs ++ [close]
+
+textC :: X.Text -> [Builder]
+textC (X.Text t) = if T.null s then [] else [fromLazyText s]
+  where s = T.replace "\n" " " (T.strip t)
+
+-}
 
