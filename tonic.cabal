@@ -14,8 +14,8 @@ Library
   GHC-Options:     -threaded -Wall -O
   HS-Source-Dirs:  src
 
-  Build-Depends:   base         >= 4   && < 5
-                 , text         >= 0.9 && < 0.10
+  Build-Depends:   base         >= 4 && < 5
+                 , text         == 0.11.0.1
                  , mtl          == 2.0.*
                  , arrow-list   == 0.1.*
 
@@ -25,8 +25,8 @@ Library
                    Xml.Tonic.Print
                    Xml.Tonic.Arrow
 
-Executable         xml-text
-  Executable:      xml-text
+Executable         test
+  Executable:      test
   Main-is:         Test.hs
   GHC-Options:     -threaded -Wall
   HS-Source-Dirs:  src
