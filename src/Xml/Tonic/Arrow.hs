@@ -27,7 +27,7 @@ module Xml.Tonic.Arrow
 , isComment
 , isDoctype
 , isElem
-, isProcessingInstruction
+, isProc
 , isText
 
 -- * Filter  elements.
@@ -51,7 +51,7 @@ module Xml.Tonic.Arrow
 , toCData
 , toComment
 , toDoctype
-, toProcessingInstruction
+, toProc
 
 -- * Creation with fixed components.
 
@@ -62,7 +62,7 @@ module Xml.Tonic.Arrow
 , mkCData
 , mkComment
 , mkDoctype
-, mkProcessingInstruction
+, mkProc
 
 -- * Converting to generic node.
 
@@ -71,7 +71,7 @@ module Xml.Tonic.Arrow
 , cdataNode
 , doctypeNode
 , commentNode
-, processingInstructionNode
+, procNode
 
 -- * Processing nodes.
 
@@ -142,8 +142,8 @@ isComment = arrL (\c -> case c of X.CommentNode t -> [t]; _ -> [])
 isDoctype :: ArrowList (~>) => X.Node ~> X.Doctype
 isDoctype = arrL (\c -> case c of X.DoctypeNode t -> [t]; _ -> [])
 
-isProcessingInstruction :: ArrowList (~>) => X.Node ~> X.ProcessingInstruction
-isProcessingInstruction = arrL (\c -> case c of X.ProcessingInstructionNode p -> [p]; _ -> [])
+isProc :: ArrowList (~>) => X.Node ~> X.ProcessingInstruction
+isProc = arrL (\c -> case c of X.ProcessingInstructionNode p -> [p]; _ -> [])
 
 elem :: (ArrowList (~>), ArrowChoice (~>)) => Text -> X.Element ~> X.Element
 elem n = filterA (isA (==n) . name)
@@ -191,8 +191,8 @@ toComment = arr X.Comment
 toDoctype :: Arrow (~>) => Text ~> X.Doctype
 toDoctype = arr X.Doctype
 
-toProcessingInstruction :: Arrow (~>) => Text ~> X.ProcessingInstruction
-toProcessingInstruction = arr X.ProcessingInstruction
+toProc :: Arrow (~>) => Text ~> X.ProcessingInstruction
+toProc = arr X.ProcessingInstruction
 
 mkElem :: ArrowList (~>) => Text -> (a ~> X.Attribute) -> (a ~> X.Node) -> a ~> X.Element
 mkElem n = toElem (arr (const n))
@@ -215,8 +215,8 @@ mkComment t = toComment . arr (const t)
 mkDoctype :: Arrow (~>) => Text -> a ~> X.Doctype
 mkDoctype t = toDoctype . arr (const t)
 
-mkProcessingInstruction :: Arrow (~>) => Text -> a ~> X.ProcessingInstruction
-mkProcessingInstruction t = toProcessingInstruction . arr (const t)
+mkProc :: Arrow (~>) => Text -> a ~> X.ProcessingInstruction
+mkProc t = toProc . arr (const t)
 
 elemNode :: Arrow (~>) => X.Element ~> X.Node
 elemNode = arr X.ElementNode
@@ -233,8 +233,8 @@ doctypeNode = arr X.DoctypeNode
 commentNode :: Arrow (~>) => X.Comment ~> X.Node
 commentNode = arr X.CommentNode
 
-processingInstructionNode :: Arrow (~>) => X.ProcessingInstruction ~> X.Node
-processingInstructionNode = arr X.ProcessingInstructionNode
+procNode :: Arrow (~>) => X.ProcessingInstruction ~> X.Node
+procNode = arr X.ProcessingInstructionNode
 
 processChildren :: ArrowList (~>) => (X.Element ~> X.Node) -> X.Element ~> X.Element
 processChildren p = toElem name attributes p 
