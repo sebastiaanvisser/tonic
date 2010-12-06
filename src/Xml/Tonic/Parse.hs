@@ -6,6 +6,7 @@
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
   , GADTs
+  , TupleSections
   #-}
 module Xml.Tonic.Parse
 (
@@ -16,7 +17,6 @@ module Xml.Tonic.Parse
 -- * Individual parsers.
 , nodes
 , node
-, text
 , element
 , close
 , self
@@ -63,19 +63,19 @@ nodes :: Parser [X.Node]
 nodes = asMany node
 
 node :: Parser (Maybe X.Node)
-node = token "<!--"      (Just . X.CommentNode               . X.Comment               <$> until "-->")
-     . token "<![CDATA[" (Just . X.CDataNode                 . X.CData                 <$> until "]]>")
-     . token "<!"        (Just . X.DoctypeNode               . X.Doctype               <$> until ">")
-     . token "<?"        (Just . X.ProcessingInstructionNode . X.ProcessingInstruction <$> until "?>")
-     $ token "<"         element
-                         text
-
-text :: Parser (Maybe X.Node)
-text = fmap (X.TextNode . X.Text) <$> while (/= '<')
+node =
+  token "<"
+    ( token "!"
+        ( token "--"      (Just . X.CommentNode               . X.Comment               <$> until "-->")
+        $ token "[CDATA[" (Just . X.CDataNode                 . X.CData                 <$> until "]]>")
+                          (Just . X.DoctypeNode               . X.Doctype               <$> until ">"))
+      . token "?"         (Just . X.ProcessingInstructionNode . X.ProcessingInstruction <$> until "?>")
+      $ element
+    ) (fmap (X.TextNode . X.Text) <$> while (/= '<'))
 
 element :: Parser (Maybe X.Node)
 element =
-  do tag <- while (not . (`elem` " \r\n/>"))
+  do tag <- while (not . (`elem` " \n/>"))
      case tag of
        Nothing -> return Nothing
        Just t  ->
@@ -83,7 +83,8 @@ element =
             a <- attributeList
             s <- self
             c <- if s then nodes <* close t else pure []
-            c `seq` return (Just (X.ElementNode (X.Element t a c)))
+            let e = X.ElementNode (X.Element t a c)
+            return (Just e)
 
 close :: T.Text -> Parser ()
 close w = token ("</" `T.append` w `T.append` ">") (pure ()) (pure ())
@@ -98,7 +99,7 @@ attributeList = asMany (space *> attribute)
 
 attribute :: Parser (Maybe X.Attribute)
 attribute =
-  do k <- while (not . (`elem` " \r\n=>/"))
+  do k <- while (not . (`elem` " \n=>/"))
      case k of
        Nothing -> return Nothing
        Just key ->
@@ -109,7 +110,7 @@ value :: Parser T.Text
 value = fromMaybe "" <$> token "=" (space *> (Just <$> doubleQuoted (singleQuoted unquoted))) (pure Nothing)
   where doubleQuoted = token "\"" (until "\"")
         singleQuoted = token "\'" (until "\'")
-        unquoted     = fromMaybe "" <$> while (not . (`elem` " \r\n>/"))
+        unquoted     = fromMaybe "" <$> while (not . (`elem` " \n>/"))
 
 space :: Parser ()
 space = () <$ while isSpace
@@ -139,32 +140,33 @@ runParser = runP
 parse :: Parser a -> T.Text -> a
 parse p = snd . runP p
 
-instance Applicative Parser where
-  pure a  = P (\t -> (t, a))
-  a <*> b = P (\t -> let (u, x) = runP a t; (v, y) = runP b u in (v, x y))
-
 instance Monad Parser where
-  return a = P (\t -> (t, a))
+  return a = P (,a)
   a >>= b  = P (\t -> let (u, x) = runP a t in runP (b x) u)
+
+instance Applicative Parser where
+  pure  = return
+  (<*>) = ap
 
 -- | Consume the input text as long as the predicate holds. When no input can
 -- be consumed the parser fails.
 
 while :: (Char -> Bool) -> Parser (Maybe T.Text)
 while f = P $ \i ->
-  let v = T.takeWhile f i
+  let (v, r) = T.span f i
   in if T.null v
      then (i, Nothing)
-     else (T.drop (T.length v) i, Just v)
+     else (r, Just v)
 
 -- | Consume the input text until the specified token is encountered. The token
 -- itself is consumed but not contained in the result.
 
 until :: T.Text -> Parser T.Text
 until t = P $ \i ->
-  case T.breakOn t i of
-    (_, "") -> ("", i)
-    (v, r ) -> (T.drop (T.length t) r, v)
+  let (v, r) = T.breakOn t i
+  in if T.null r
+     then ("", i)
+     else (T.drop (T.length t) r, v)
 
 -- | Parse a single token, when it succeeds continue with the first parser,
 -- when then token can not be recognized continue with the second parser.
@@ -178,9 +180,10 @@ token t p q = P $ \i ->
 -- | Repeatedly apply a parsers until it fails.
 
 asMany :: Parser (Maybe a) -> Parser [a]
-asMany p = P $ \i ->
-  case runP p i of
-    (_, Nothing) -> (i, [])
-    (j, Just a)  -> let (k, as) = runP (asMany p) j
-                    in (k, a:as)
+asMany p = go
+ where go = do x <- p
+               case x of
+                 Nothing -> return []
+                 Just a  -> do as <- go
+                               return (a:as)
 
