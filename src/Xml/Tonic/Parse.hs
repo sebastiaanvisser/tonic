@@ -6,7 +6,6 @@
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
   , GADTs
-  , TupleSections
   #-}
 module Xml.Tonic.Parse
 (
@@ -15,7 +14,9 @@ module Xml.Tonic.Parse
   xml
 
 -- * Individual parsers.
+, nodes
 , node
+, text
 , element
 , close
 , self
@@ -37,6 +38,7 @@ module Xml.Tonic.Parse
 )
 where
 
+import Control.Applicative
 import Control.Monad
 import Data.Char
 import Data.Maybe
@@ -57,69 +59,69 @@ import qualified Xml.Tonic.Types as X
 xml :: T.Text -> X.Xml
 xml = parse (asMany node)
 
+nodes :: Parser [X.Node]
+nodes = asMany node
+
 node :: Parser (Maybe X.Node)
-node =
-  token "<"
-    ( token "!"
-        ( token "--"      ((Just . X.CommentNode               . X.Comment              ) `fmap` until "-->")
-        $ token "[CDATA[" ((Just . X.CDataNode                 . X.CData                ) `fmap` until "]]>")
-                          ((Just . X.DoctypeNode               . X.Doctype              ) `fmap` until ">"))
-      . token "?"         ((Just . X.ProcessingInstructionNode . X.ProcessingInstruction) `fmap` until "?>")
-      $ element
-    ) (fmap (X.TextNode . X.Text) `fmap` while (/= '<'))
+node = token "<!--"      (Just . X.CommentNode               . X.Comment               <$> until "-->")
+     . token "<![CDATA[" (Just . X.CDataNode                 . X.CData                 <$> until "]]>")
+     . token "<!"        (Just . X.DoctypeNode               . X.Doctype               <$> until ">")
+     . token "<?"        (Just . X.ProcessingInstructionNode . X.ProcessingInstruction <$> until "?>")
+     $ token "<"         element
+                         text
+
+text :: Parser (Maybe X.Node)
+text = fmap (X.TextNode . X.Text) <$> while (/= '<')
 
 element :: Parser (Maybe X.Node)
 element =
-  do tag <- while (not . (`elem` " \n/>"))
+  do space
+     tag <- while (not . (`elem` " \r\n/>"))
      case tag of
        Nothing -> return Nothing
        Just t  ->
-         do _ <- space
+         do space
             a <- attributeList
             s <- self
-            c <- if s then
-                    do ns <- asMany node
-                       close t
-                       return ns
-                 else return []
-            return (Just (X.ElementNode (X.Element t a c)))
+            c <- if s then nodes <* close t else pure []
+            c `seq` return (Just (X.ElementNode (X.Element t a c)))
 
 close :: T.Text -> Parser ()
-close w = token ("</" `T.append` w `T.append` ">") (return ()) (return ())
+close w = token ("</" `T.append` w `T.append` ">") (pure ()) (pure ())
 
 self :: Parser Bool
-self = token ">"  (return True)
-     $ token "/>" (return False)
-                  (return False)
+self = token ">"  (pure True)
+     $ token "/>" (pure False)
+                  (pure False)
 
 attributeList :: Parser [X.Attribute]
-attributeList = asMany (space >> attribute)
+attributeList = asMany (space *> attribute)
 
 attribute :: Parser (Maybe X.Attribute)
 attribute =
-  do k <- while (not . (`elem` " \n=>/"))
+  do k <- while (not . (`elem` " \r\n=>/"))
      case k of
        Nothing -> return Nothing
        Just key ->
-         do v <- space >> value
+         do v <- space *> value
             return (Just (X.Attribute key v))
 
 value :: Parser T.Text
-value = fromMaybe "" `fmap` token "=" (space >> (Just `fmap` doubleQuoted (singleQuoted unquoted))) (return Nothing)
+value = fromMaybe "" <$> token "=" (space *> (Just <$> doubleQuoted (singleQuoted unquoted))) (pure Nothing)
   where doubleQuoted = token "\"" (until "\"")
         singleQuoted = token "\'" (until "\'")
-        unquoted     = fromMaybe "" `fmap` while (not . (`elem` " \n>/"))
+        unquoted     = fromMaybe "" <$> while (not . (`elem` " \r\n>/"))
 
-space :: Parser (Maybe T.Text)
-space = while isSpace
+space :: Parser ()
+space = () <$ while isSpace
 
 -------------------------------------------------------------------------------
 
 -- | A very simple parser context for parsers that cannot fail. Because no
 -- failure is possible by default we can do without any 'MonadPlus' and
 -- 'Alternative' instances, which allows us to perform lazy online parsing.
--- A 'Monad' instance is provided, because the open and close tags XML requires
--- context-sensitive parsing.
+-- Besides an 'Applicative' instance also a 'Monad' instance is provided,
+-- because the open and close tags XML requires context-sensitive parsing.
 --
 -- When some specific parser actually has the ability to fail (by not consume
 -- any input) it can make this explicit by using a 'Maybe' result value.
@@ -138,8 +140,12 @@ runParser = runP
 parse :: Parser a -> T.Text -> a
 parse p = snd . runP p
 
+instance Applicative Parser where
+  pure a  = P (\t -> (t, a))
+  a <*> b = P (\t -> let (u, x) = runP a t; (v, y) = runP b u in (v, x y))
+
 instance Monad Parser where
-  return a = P (,a)
+  return a = P (\t -> (t, a))
   a >>= b  = P (\t -> let (u, x) = runP a t in runP (b x) u)
 
 -- | Consume the input text as long as the predicate holds. When no input can
@@ -147,20 +153,19 @@ instance Monad Parser where
 
 while :: (Char -> Bool) -> Parser (Maybe T.Text)
 while f = P $ \i ->
-  let (v, r) = T.span f i
+  let v = T.takeWhile f i
   in if T.null v
      then (i, Nothing)
-     else (r, Just v)
+     else (T.drop (T.length v) i, Just v)
 
 -- | Consume the input text until the specified token is encountered. The token
 -- itself is consumed but not contained in the result.
 
 until :: T.Text -> Parser T.Text
 until t = P $ \i ->
-  let (v, r) = T.breakOn t i
-  in if T.null r
-     then ("", i)
-     else (T.drop (T.length t) r, v)
+  case T.breakOn t i of
+    (_, "") -> ("", i)
+    (v, r ) -> (T.drop (T.length t) r, v)
 
 -- | Parse a single token, when it succeeds continue with the first parser,
 -- when then token can not be recognized continue with the second parser.
@@ -174,10 +179,9 @@ token t p q = P $ \i ->
 -- | Repeatedly apply a parsers until it fails.
 
 asMany :: Parser (Maybe a) -> Parser [a]
-asMany p = go
- where go = do x <- p
-               case x of
-                 Nothing -> return []
-                 Just a  -> do as <- go
-                               return (a:as)
+asMany p = P $ \i ->
+  case runP p i of
+    (_, Nothing) -> (i, [])
+    (j, Just a)  -> let (k, as) = runP (asMany p) j
+                    in (k, a:as)
 

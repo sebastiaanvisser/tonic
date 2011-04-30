@@ -65,8 +65,7 @@ element :: X.Element -> [Builder]
 element (X.Element n a c) =
   let subs   = nodes c
       attrs  = mconcat (attributes a)
-      open s = "<" <> fromLazyText n <> attrs
-                   <> if s then "/>" else ">"
+      open s = "<" <> fromLazyText n <> attrs <> if s then "/>" else ">"
       close  = "</" <> fromLazyText n <> ">"
   in case subs of
     [] -> open True  : subs
@@ -91,7 +90,7 @@ doctype :: X.Doctype -> [Builder]
 doctype (X.Doctype d) = ["<!" <> fromLazyText d <> " >"]
 
 processingInstruction :: X.ProcessingInstruction -> [Builder]
-processingInstruction (X.ProcessingInstruction i) = ["<?" <> fromLazyText i <> " ?>"]
+processingInstruction (X.ProcessingInstruction i) = ["<?" <> fromLazyText i <> "?>"]
 
 {-
 

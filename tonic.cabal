@@ -15,15 +15,16 @@ Library
   HS-Source-Dirs:  src
 
   Build-Depends:   base         >= 4 && < 5
-                 , text         == 0.11.0.1
+                 , text         == 0.11.*
                  , mtl          == 2.0.*
-                 , arrow-list   == 0.1.*
+                 , arrow-list   == 0.2.*
 
   Exposed-modules: Xml.Tonic
-                   Xml.Tonic.Types
+                   Xml.Tonic.Arrow
                    Xml.Tonic.Parse
                    Xml.Tonic.Print
-                   Xml.Tonic.Arrow
+                   Xml.Tonic.Transform
+                   Xml.Tonic.Types
 
 Executable         test
   Executable:      test
