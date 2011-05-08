@@ -6,11 +6,12 @@
 module Main where
 
 import Data.Monoid
-import Control.Monad
 import Control.DeepSeq
 import Criterion.Config
 import Criterion.Main
+import Data.Time.Clock
 import System.Environment
+import System.IO
 
 import qualified Criterion.MultiMap as M
 import qualified Data.Text.Lazy     as T
@@ -27,8 +28,19 @@ main =
        _                    -> putStrLn "error: unrecognised action, try 'benchmarks' or 'profile'."
 
 profile :: FilePath -> IO ()
-profile = print . action <=< T.readFile
-  where action = T.length . printer . parser
+profile file =
+  do start <- getCurrentTime
+     txt <- T.readFile file
+     txt `deepseq` return ()
+     putStr "profiling... "; hFlush stdout
+     let xml = parser txt
+     xml `deepseq` return ()
+     stop  <- getCurrentTime
+     let duration = diffUTCTime stop start
+     putStrLn "ok"
+     putStrLn ("Characters:     " ++ show (T.length txt `div` 1024) ++ "k")
+     putStrLn ("Duration:       " ++ show duration)
+     putStrLn ("Chars per sec:  " ++ show (round (fromIntegral (T.length txt) / duration) `div` 1024 :: Int) ++ "k")
 
 benchmarks :: FilePath -> IO ()
 benchmarks file =

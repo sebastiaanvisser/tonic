@@ -35,13 +35,18 @@ nodes :: Parser [X.Node]
 nodes = asMany (fakeClose >> node)
 
 node :: Parser (Maybe X.Node)
-node
-  = tokenNS "<!--"      ((Just . X.CommentNode               . X.Comment              ) `liftM` until "-->")
-  . tokenNS "<![CDATA[" ((Just . X.CDataNode                 . X.CData                ) `liftM` until "]]>")
-  . tokenNS "<!"        ((Just . X.DoctypeNode               . X.Doctype              ) `liftM` until ">")
-  . tokenNS "<?"        ((Just . X.ProcessingInstructionNode . X.ProcessingInstruction) `liftM` until "?>")
-  $ tokenNS "<"         element
-                        text
+node =
+  peek '<'
+    ( peek '!'
+       ( tokenNS "--"      ((Just . X.CommentNode               . X.Comment              ) `liftM` until "-->")
+       $ tokenNS "[CDATA[" ((Just . X.CDataNode                 . X.CData                ) `liftM` until "]]>")
+                           ((Just . X.DoctypeNode               . X.Doctype              ) `liftM` until ">")
+       )
+       ( tokenNS "?"       ((Just . X.ProcessingInstructionNode . X.ProcessingInstruction) `liftM` until "?>")
+       $ element
+       )
+    )
+    text
 
 text :: Parser (Maybe X.Node)
 text = fmap (X.TextNode . X.Text) `liftM` while (/= '<')
@@ -49,7 +54,7 @@ text = fmap (X.TextNode . X.Text) `liftM` while (/= '<')
 element :: Parser (Maybe X.Node)
 element =
   do space
-     tag <- while (not . (`elem` " \r\n/>"))
+     tag <- while (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '/' && x /= '>')
      case tag of
        Nothing -> return Nothing
        Just t  ->
@@ -93,7 +98,7 @@ attributeList = asMany attribute
 attribute :: Parser (Maybe X.Attribute)
 attribute =
   do space
-     k <- while (not . (`elem` " \r\n=>/"))
+     k <- while (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '=' && x /= '>' && x /= '/')
      case k of
        Nothing -> return Nothing
        Just key ->
@@ -102,12 +107,12 @@ attribute =
 
 value :: Parser T.Text
 value = fromMaybe "" `liftM` token "=" (Just `liftM` doubleQuoted (singleQuoted unquoted)) (return Nothing)
-  where doubleQuoted = token "\"" (until "\"")
-        singleQuoted = token "\'" (until "\'")
-        unquoted     = fromMaybe "" `liftM` while (not . (`elem` " \r\n>/"))
+  where doubleQuoted = token "\"" (while1 (/= '\"'))
+        singleQuoted = token "\'" (while1 (/= '\''))
+        unquoted     = fromMaybe "" `liftM` while (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '=' && x /= '>' && x /= '/')
 
 space :: Parser ()
-space = while (`elem` " \t\r\n") >> return ()
+space = while (\x -> x == ' ' || x == '\t' || x == '\r' || x == '\n') >> return ()
 
 -------------------------------------------------------------------------------
 
@@ -134,6 +139,14 @@ try p = P $ \s i ->
     R _ Nothing -> R i Nothing
     a           -> a
 
+peek :: Char -> Parser a -> Parser a -> Parser a
+peek c p q = P $ \s i ->
+  case T.uncons i of
+    Just (x, xs) | x == c -> runP p s xs
+    _                     -> runP q s i
+
+--   R t (fmap fst (T.uncons t))
+
 push :: T.Text -> Parser a -> Parser a
 push s p = P $ \ss -> runP p (s:ss)
 
@@ -154,10 +167,14 @@ instance Monad Parser where
 
 while :: (Char -> Bool) -> Parser (Maybe T.Text)
 while f = P $ \_ i ->
-  let v = T.takeWhile f i
-  in if T.null v
-     then R i Nothing
-     else R (T.drop (T.length v) i) (Just v)
+  case T.span f i of
+    ("", _) -> R i Nothing
+    (v,  r) -> R r (Just v)
+
+while1 :: (Char -> Bool) -> Parser T.Text
+while1 f = P $ \_ i ->
+  case T.span f i of
+    (v,  r) -> R (T.tail r) v
 
 -- | Consume the input text until the specified token is encountered. The token
 -- itself is consumed but not contained in the result.
