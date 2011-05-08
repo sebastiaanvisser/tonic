@@ -1,1 +1,3 @@
 dist/
+bench/files/*
+bench/*-prof*
