@@ -1,30 +1,5 @@
 {-# LANGUAGE OverloadedStrings, GADTs #-}
-module Xml.Tonic.Print
-(
-
--- * Top level XML printers.
-  xml
--- , compact
-
--- * As-is text builders.
-, element
-, nodes
-, node
-, attributes
-, attribute
-, text
-, cdata
-, comment
-, doctype
-, processingInstruction
-
--- Compact text builders.
--- , elementC
--- , nodesC
--- , nodeC
--- , textC
-)
-where
+module Xml.Tonic.Print (printer) where
 
 import Data.Monoid
 import Data.Text.Lazy.Builder
@@ -38,8 +13,8 @@ import qualified Xml.Tonic.Types as X
 
 -- (parse . print == id) is guaranteed, (parse . print == id) is /not/ guaranteed.
 
-xml :: X.Xml -> T.Text
-xml = toLazyText . mconcat . nodes
+printer :: X.Xml -> T.Text
+printer = toLazyText . mconcat . nodes
 
 -- | Print an XML tree to a lazy text in a compacted form, stripped from redundant whitespace.
 
@@ -84,10 +59,10 @@ cdata :: X.CData -> [Builder]
 cdata (X.CData d) = ["<![CDATA[" <> fromLazyText d <> "]]>"]
 
 comment :: X.Comment -> [Builder]
-comment (X.Comment c) = ["<!-- " <> fromLazyText c <> " -->"]
+comment (X.Comment c) = ["<!--" <> fromLazyText c <> "-->"]
 
 doctype :: X.Doctype -> [Builder]
-doctype (X.Doctype d) = ["<!" <> fromLazyText d <> " >"]
+doctype (X.Doctype d) = ["<!" <> fromLazyText d <> ">"]
 
 processingInstruction :: X.ProcessingInstruction -> [Builder]
 processingInstruction (X.ProcessingInstruction i) = ["<?" <> fromLazyText i <> "?>"]

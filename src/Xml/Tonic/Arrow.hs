@@ -100,8 +100,9 @@ import Control.Arrow.ArrowList
 import Control.Category
 import Data.Text.Lazy (Text)
 import Prelude hiding (elem, (.), id, concat)
-import qualified Xml.Tonic.Parse as Parse
-import qualified Xml.Tonic.Print as Print
+import Xml.Tonic.Parse
+import Xml.Tonic.Print
+
 import qualified Xml.Tonic.Types as X
 
 name :: Arrow (~>) => X.Element ~> Text
@@ -268,8 +269,8 @@ processBottomUpWhen :: (ArrowChoice (~>), ArrowList (~>)) => (X.Element ~> c) ->
 processBottomUpWhen c a = ifA c id (a . processChildren (elemNode . processBottomUpWhen c a))
 
 printXml :: Arrow (~>) => X.Node ~> Text
-printXml = arr (Print.xml . return)
+printXml = arr (printer . return)
 
 parseXml :: ArrowList (~>) => Text ~> X.Node
-parseXml = arrL Parse.xml
+parseXml = arrL parser
 

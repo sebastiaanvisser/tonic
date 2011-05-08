@@ -9,19 +9,19 @@ module Xml.Tonic.Transform
 )
 where
 
--- import Control.Arrow
--- import Control.Arrow.ArrowList
 import Control.Arrow.List
 import Control.Category
+import Data.Text.Lazy (Text)
+import Prelude hiding ((.), id)
 import Xml.Tonic.Arrow
 import Xml.Tonic.Types (Node)
-import Prelude hiding (concat, (.), id, elem)
-import Data.Text.Lazy
+
+import qualified Data.Text.Lazy as T
 
 -- | Construct an XML representation from some value using a list arrow.
 
 construct :: (a `ListArrow` Node) -> a -> Text
-construct tr = concat . runListArrow (printXml . tr)
+construct tr = T.concat . runListArrow (printXml . tr)
 
 -- | Destruct an XML representation to some values using a list arrow.
 --
@@ -41,7 +41,7 @@ destruct tr = runListArrow (tr . parseXml)
 -- | Transform an XML representation using a list arrow.
 
 transform :: (Node `ListArrow` Node) -> Text -> Text
-transform tr = concat . runListArrow (printXml . tr . parseXml)
+transform tr = T.concat . runListArrow (printXml . tr . parseXml)
 
 -- renameULs :: Text -> Text
 -- renameULs = transform (elemNode . processTopDownWhen id remove . isElem)

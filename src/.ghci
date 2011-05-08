@@ -1,0 +1,2 @@
+:set -hide-package tonic
+:set -XOverloadedStrings

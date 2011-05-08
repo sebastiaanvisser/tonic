@@ -19,16 +19,10 @@ Library
                  , mtl          == 2.0.*
                  , arrow-list   == 0.2.*
 
-  Exposed-modules: Xml.Tonic
-                   Xml.Tonic.Arrow
-                   Xml.Tonic.Parse
+  Other-modules:   Xml.Tonic.Parse
                    Xml.Tonic.Print
                    Xml.Tonic.Transform
+  Exposed-modules: Xml.Tonic
+                   Xml.Tonic.Arrow
                    Xml.Tonic.Types
-
-Executable         test
-  Executable:      test
-  Main-is:         Test.hs
-  GHC-Options:     -threaded -Wall
-  HS-Source-Dirs:  src
 

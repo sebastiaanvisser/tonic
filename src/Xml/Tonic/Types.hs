@@ -1,9 +1,3 @@
-{-# LANGUAGE
-    OverloadedStrings
-  , GADTs
-  , EmptyDataDecls
-  , StandaloneDeriving
-  #-}
 module Xml.Tonic.Types where
 
 import qualified Data.Text.Lazy as T
