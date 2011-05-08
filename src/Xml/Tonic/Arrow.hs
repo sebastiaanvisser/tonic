@@ -53,6 +53,10 @@ module Xml.Tonic.Arrow
 , toDoctype
 , toProc
 
+, noXml
+, noAttributes
+, emptyElem
+
 -- * Creation with fixed components.
 
 , mkElem
@@ -193,6 +197,15 @@ toDoctype = arr X.Doctype
 
 toProc :: Arrow (~>) => Text ~> X.ProcessingInstruction
 toProc = arr X.ProcessingInstruction
+
+noXml :: ArrowZero (~>) => a ~> X.Node
+noXml = zeroArrow
+
+noAttributes :: ArrowZero (~>) => a ~> X.Attribute
+noAttributes = zeroArrow
+
+emptyElem :: (ArrowList (~>), ArrowZero (~>)) => Text -> a ~> X.Element
+emptyElem n = mkElem n noAttributes noXml
 
 mkElem :: ArrowList (~>) => Text -> (a ~> X.Attribute) -> (a ~> X.Node) -> a ~> X.Element
 mkElem n = toElem (arr (const n))
