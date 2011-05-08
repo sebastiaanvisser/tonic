@@ -6,9 +6,11 @@
 module Main where
 
 import Data.Monoid
+import Control.Monad
 import Control.DeepSeq
 import Criterion.Config
 import Criterion.Main
+import System.Environment
 
 import qualified Criterion.MultiMap as M
 import qualified Data.Text.Lazy     as T
@@ -18,7 +20,19 @@ import Xml.Tonic
 
 main :: IO ()
 main =
-  do txt <- readXml "files/0x10.xml"
+  do args <- getArgs
+     case args of
+       ["benchmarks", file] -> benchmarks file
+       ["profile",    file] -> profile    file
+       _                    -> putStrLn "error: unrecognised action, try 'benchmarks' or 'profile'."
+
+profile :: FilePath -> IO ()
+profile = print . action <=< T.readFile
+  where action = T.length . printer . parser
+
+benchmarks :: FilePath -> IO ()
+benchmarks file =
+  do txt <- readXml file
      let xml = parser txt
      xml `deepseq` return ()
      defaultMainWith cfg (return ())
