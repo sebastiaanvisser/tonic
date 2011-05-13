@@ -15,6 +15,7 @@ module Xml.Tonic
 , transform
 
 -- * List arrows for processing XML.
+, (:~>)
 , module Xml.Tonic.Arrow
 
 -- * XML tree datatypes.

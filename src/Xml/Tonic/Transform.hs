@@ -3,7 +3,8 @@
   , OverloadedStrings
   #-}
 module Xml.Tonic.Transform
-( construct
+( (:~>)
+, construct
 , destruct
 , transform
 )
@@ -18,9 +19,13 @@ import Xml.Tonic.Types (Node)
 
 import qualified Data.Text.Lazy as T
 
+-- | Prettier way to write down the ListArrow type.
+
+type a :~> b = ListArrow a b
+
 -- | Construct an XML representation from some value using a list arrow.
 
-construct :: (a `ListArrow` Node) -> a -> Text
+construct :: (a :~> Node) -> a -> Text
 construct tr = T.concat . runListArrow (printXml . tr)
 
 -- | Destruct an XML representation to some values using a list arrow.
@@ -35,12 +40,12 @@ construct tr = T.concat . runListArrow (printXml . tr)
 --   >   ghci> sources "<div><img src=a.png/><a><img src=b.jpg/></a></div>"
 --   >   ["a.png","b.jpg"]
 
-destruct :: (Node `ListArrow` a) -> Text -> [a]
+destruct :: (Node :~> a) -> Text -> [a]
 destruct tr = runListArrow (tr . parseXml)
 
 -- | Transform an XML representation using a list arrow.
 
-transform :: (Node `ListArrow` Node) -> Text -> Text
+transform :: (Node :~> Node) -> Text -> Text
 transform tr = T.concat . runListArrow (printXml . tr . parseXml)
 
 -- renameULs :: Text -> Text
