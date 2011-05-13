@@ -2,18 +2,21 @@
 {-# LANGUAGE
     StandaloneDeriving
   , GeneralizedNewtypeDeriving
+  , OverloadedStrings
   #-}
 module Main where
 
 import Data.Monoid
+import Control.Category
+import Control.Monad
 import Control.DeepSeq
 import Criterion.Config
 import Criterion.Main
 import Data.Time.Clock
 import System.Environment
 import System.IO
+import Prelude hiding (id, (.), elem)
 
-import qualified Criterion.MultiMap as M
 import qualified Data.Text.Lazy     as T
 import qualified Data.Text.Lazy.IO  as T
 
@@ -21,19 +24,26 @@ import Xml.Tonic
 
 main :: IO ()
 main =
-  do args <- getArgs
-     case args of
-       ["benchmarks", file] -> benchmarks file
-       ["profile",    file] -> profile    file
-       _                    -> putStrLn "error: unrecognised action, try 'benchmarks' or 'profile'."
+--     benchmarks "files/0x4.xml"
+    forM_ [0..9::Int] (const (profile parser "files/0x4.xml"))
 
-profile :: FilePath -> IO ()
-profile file =
+--   do args <- getArgs
+--      case args of
+--        ["benchmarks",        file] -> benchmarks file
+--        ["profile", "parser", file] -> forM_ [0..9::Int] (const (profile parser file))
+--        ["profile", "anchor", file] -> profile allAnchors file
+--        _                           -> putStrLn "error: unrecognised action, try 'benchmarks' or 'profile'."
+
+allAnchors :: T.Text -> [Element]
+allAnchors = destruct (deep (elem "a") . isElem)
+
+profile :: NFData a => (T.Text -> a) -> FilePath -> IO ()
+profile action file =
   do start <- getCurrentTime
      txt <- T.readFile file
      txt `deepseq` return ()
      putStr "profiling... "; hFlush stdout
-     let xml = parser txt
+     let xml = action txt
      xml `deepseq` return ()
      stop  <- getCurrentTime
      let duration = diffUTCTime stop start
@@ -54,8 +64,8 @@ benchmarks file =
        , bench "printer/parser" $ nf (parser . printer) xml
        ]
   where cfg = defaultConfig
-                { cfgPlot    = M.singleton KernelDensity (PNG 800 600)
-                , cfgSamples = Last (Just 4)
+                { -- cfgPlot    = M.singleton KernelDensity (PNG 800 600)
+                  cfgSamples = Last (Just 100)
                 }
 
 readXml :: FilePath -> IO T.Text
