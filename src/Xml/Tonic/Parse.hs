@@ -54,38 +54,31 @@ text = fmap (X.TextNode . X.Text) `liftM` while (/= '<')
 element :: Parser (Maybe X.Node)
 element =
   do space
-     tag <- while (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '/' && x /= '>')
-     case tag of
-       Nothing -> return Nothing
-       Just t  ->
-         do a <- attributeList
-            s <- self
-            c <- if s then push t $
-                    do ns <- nodes
-                       _ <- close t
-                       return ns
-                 else return []
-            return (Just (X.ElementNode (X.Element t a c)))
+     whileM (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '/' && x /= '>') $ \t ->
+       do a <- attributeList
+          s <- self
+          c <- if s then push t $
+                  do ns <- nodes
+                     close t
+                     return ns
+               else return []
+          return (X.ElementNode (X.Element t a c))
 
-
-fakeClose :: Parser (Maybe ())
+fakeClose :: Parser ()
 fakeClose = 
   do st <- stack
      try $
         do t <- token1 "</"
            n <- while (/= '>')
-           _ <- token1 ">"
-           return $
-             case (t, n) of
-               (Just _, Just m) | not (m `elem` st) -> Just ()
-               _                                    -> Nothing
+           x <- token1 ">"
+           return $ t && maybe False (\m -> not (elem m st)) n && x
 
-close :: T.Text -> Parser (Maybe T.Text)
+close :: T.Text -> Parser ()
 close w = try $
   do a <- token1 "</"
      c <- token1 w
      d <- token1 ">"
-     return (a >> c >> d)
+     return (a && c && d)
 
 self :: Parser Bool
 self = token ">"  (return True)
@@ -98,12 +91,9 @@ attributeList = asMany attribute
 attribute :: Parser (Maybe X.Attribute)
 attribute =
   do space
-     k <- while (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '=' && x /= '>' && x /= '/')
-     case k of
-       Nothing -> return Nothing
-       Just key ->
+     whileM (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '=' && x /= '>' && x /= '/') $ \key ->
          do v <- value
-            return (Just (X.Attribute key v))
+            return (X.Attribute key v)
 
 value :: Parser T.Text
 value = fromMaybe "" `liftM` token "=" (Just `liftM` doubleQuoted (singleQuoted unquoted)) (return Nothing)
@@ -112,7 +102,7 @@ value = fromMaybe "" `liftM` token "=" (Just `liftM` doubleQuoted (singleQuoted 
         unquoted     = fromMaybe "" `liftM` while (\x -> x /= ' ' && x /= '\r' && x /= '\n' && x /= '=' && x /= '>' && x /= '/')
 
 space :: Parser ()
-space = while (\x -> x == ' ' || x == '\t' || x == '\r' || x == '\n') >> return ()
+space = while_ (\x -> x == ' ' || x == '\t' || x == '\r' || x == '\n')
 
 -------------------------------------------------------------------------------
 
@@ -124,6 +114,7 @@ space = while (\x -> x == ' ' || x == '\t' || x == '\r' || x == '\n') >> return 
 -- any input) it can make this explicit by using a 'Maybe' result value.
 
 data R a = R T.Text a
+  deriving Functor
 
 newtype Parser a = P { runP :: [T.Text] -> T.Text -> R a }
 
@@ -133,11 +124,11 @@ newtype Parser a = P { runP :: [T.Text] -> T.Text -> R a }
 runParser :: Parser a -> T.Text -> R a
 runParser p = runP p []
 
-try :: Parser (Maybe a) -> Parser (Maybe a)
+try :: Parser Bool -> Parser ()
 try p = P $ \s i ->
   case runP p s i of
-    R _ Nothing -> R i Nothing
-    a           -> a
+    R _ False -> R i ()
+    R b True  -> R b ()
 
 peek :: Char -> Parser a -> Parser a -> Parser a
 peek c p q = P $ \s i ->
@@ -171,6 +162,18 @@ while f = P $ \_ i ->
     ("", _) -> R i Nothing
     (v,  r) -> R r (Just v)
 
+while_ :: (Char -> Bool) -> Parser ()
+while_ f = P $ \_ i ->
+  case T.span f i of
+    ("", _) -> R i ()
+    (_,  r) -> R r ()
+
+whileM :: (Char -> Bool) -> (T.Text -> Parser a) -> Parser (Maybe a)
+whileM f p = P $ \s i ->
+  case T.span f i of
+    ("", _) -> R i Nothing
+    (v,  r) -> Just `fmap` runP (p v) s r
+
 while1 :: (Char -> Bool) -> Parser T.Text
 while1 f = P $ \_ i ->
   case T.span f i of
@@ -200,11 +203,11 @@ tokenNS t p q = P $ \s i ->
     Just j -> runP p s j
     _      -> runP q s i
 
-token1 :: T.Text -> Parser (Maybe T.Text)
+token1 :: T.Text -> Parser Bool
 token1 t = P $ \_ i ->
   case T.stripPrefix t (T.dropWhile isSpace i) of
-    Just j -> R j (Just t)
-    _      -> R i Nothing
+    Just j -> R j True
+    _      -> R i False
 
 
 -- | Repeatedly apply a parsers until it fails.
