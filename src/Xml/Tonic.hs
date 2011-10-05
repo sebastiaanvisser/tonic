@@ -25,10 +25,16 @@ module Xml.Tonic
 , parser
 , printer
 
+-- * Generic conversion from and to Haskell datatypes.
+, Xml (..)
+, fromXmlText
+, toXmlText
+
 )
 where
 
 import Xml.Tonic.Arrow
+import Xml.Tonic.Generic
 import Xml.Tonic.Parse
 import Xml.Tonic.Print
 import Xml.Tonic.Types hiding
