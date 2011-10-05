@@ -120,8 +120,8 @@ key = arr X.key
 value :: Arrow (~>) => X.Attribute ~> Text
 value = arr X.value
 
-text :: ArrowList (~>) => X.Element ~> Text
-text = arr X.text . isText . children
+text :: ArrowList (~>) => X.Node ~> Text
+text = arr X.text . isText
 
 cdata :: ArrowList (~>) => X.Element ~> Text
 cdata = arr X.cdata . isCData . children
@@ -260,7 +260,7 @@ modifyName :: ArrowList (~>) => (X.Element ~> Text) -> X.Element ~> X.Element
 modifyName p = toElem p attributes children
 
 processText :: ArrowList (~>) => (Text ~> Text) -> X.Element ~> X.Element
-processText a = processChildren (textNode . toText . a . text)
+processText a = processChildren (textNode . toText . a . text . children)
 
 processTopDownWhen :: (ArrowChoice (~>), ArrowList (~>)) => (X.Element ~> c) -> (X.Element ~> X.Element) -> X.Element ~> X.Element
 processTopDownWhen c a = ifA c id (processChildren (elemNode . processTopDownWhen c a) . a)

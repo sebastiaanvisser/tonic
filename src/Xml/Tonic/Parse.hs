@@ -28,10 +28,10 @@ import qualified Xml.Tonic.Types as X
 -- and allows us to process documents that have potential syntax or encoding
 -- errors.
 
-parser :: T.Text -> X.Xml
+parser :: T.Text -> X.Nodes
 parser = parse nodes
 
-nodes :: Parser [X.Node]
+nodes :: Parser X.Nodes
 nodes = asMany (fakeClose >> node)
 
 node :: Parser (Maybe X.Node)

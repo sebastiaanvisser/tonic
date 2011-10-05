@@ -13,7 +13,7 @@ import qualified Xml.Tonic.Types as X
 
 -- (parse . print == id) is guaranteed, (parse . print == id) is /not/ guaranteed.
 
-printer :: X.Xml -> T.Text
+printer :: X.Nodes -> T.Text
 printer = toLazyText . mconcat . nodes
 
 -- | Print an XML tree to a lazy text in a compacted form, stripped from redundant whitespace.
@@ -25,7 +25,7 @@ printer = toLazyText . mconcat . nodes
 
 -- As-is builders.
 
-nodes :: [X.Node] -> [Builder]
+nodes :: X.Nodes -> [Builder]
 nodes = concatMap node
 
 node :: X.Node -> [Builder]
